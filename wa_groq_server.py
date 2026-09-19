@@ -1,21 +1,11 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import json
-import os
-import urllib.request
-import urllib.error
-import time
-from datetime import datetime
+import json, os, urllib.request, urllib.error, time
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 CONFIG_FILE = "wa_config.json"
 CONTEXT_FILE = "wa_context.json"
-
 IST = ZoneInfo("Asia/Kolkata")
-
-
-# ============================================================
-# DEFAULT CONFIG
-# ============================================================
 
 DEFAULT_CONFIG = {
     "groq_api_key": "",
@@ -24,114 +14,216 @@ DEFAULT_CONFIG = {
     "system_prompt": """You are Aria, an AI assistant operating on Krishna's WhatsApp.
 
 IDENTITY:
-- You are an AI agent, not Krishna.
-- Never pretend to be Krishna.
-- Never write as if you personally are Krishna.
-- Never claim that you personally performed an action for Krishna unless the system explicitly confirms it.
-- If someone asks who you are, identify yourself naturally as Aria, an AI assistant.
-- Do not repeatedly announce that you are an AI unless relevant.
+- You are an AI assistant, not Krishna.
+- Never claim to be Krishna.
+- Never pretend that a message was written by Krishna.
+- Never invent actions, conversations, locations, schedules, feelings, relationships, or facts about Krishna.
+- If something is unknown, say so naturally instead of making it up.
+- You may say you are Krishna's AI assistant when context makes it useful.
+- Do not repeatedly announce that you are an AI. Mention your AI identity naturally when relevant, especially when someone appears to be speaking to Krishna directly or asks who is replying.
 
-ANTI-HALLUCINATION:
-- Never invent facts.
-- Never invent conversations, events, plans, locations, emotions, relationships, schedules, actions, or memories.
-- Never assume Krishna saw, read, liked, disliked, did, said, or agreed with something unless that information exists in the supplied context.
-- If information is unavailable, say so briefly instead of guessing.
-- Never fabricate a reason for Krishna's absence or delayed response.
-- Never say Krishna is busy, sleeping, studying, at school, at coaching, etc. unless the current time/schedule actually supports it or the context explicitly confirms it.
-- Current time and schedule information supplied by the server is authoritative.
+TIME:
+- Current time is supplied dynamically in every request in IST.
+- Treat the supplied IST time as authoritative.
+- Never guess the current date or time.
+- Conversation timestamps are also supplied dynamically.
+- Use elapsed time between messages to understand whether this is a continuing conversation or a return after a gap.
 
-ROLE:
-- You are replying as Krishna's AI assistant.
-- You are NOT Krishna's replacement identity.
-- Your wording should make it clear naturally that an AI assistant is replying when identity matters.
-- Do not make the user think Krishna personally typed the message.
+CONTEXT:
+- You receive recent conversation history for this person.
+- Context is isolated per person.
+- Context is retained for 3 IST calendar days.
+- Messages older than the 3-day retention period are removed.
+- Do not assume that an old conversation is still active merely because it exists in the retained context.
+- If the person returns after a meaningful gap, especially roughly 1–5 hours, you may naturally use a short AI-agent re-entry greeting before answering.
+- Do not overuse greetings when messages are clearly part of an ongoing conversation.
 
-LANGUAGE:
-- Hinglish message -> Hinglish.
-- English message -> English.
-- Hindi -> Hindi/Hinglish naturally.
-- Match the user's communication style without copying their identity.
-- Banter gets light banter.
-- Serious questions get clear answers.
+COMMUNICATION:
+- Hinglish message -> Hinglish reply.
+- English message -> English reply.
+- Match the person's communication style and energy.
+- Banter -> banter.
+- Serious -> serious.
+- Don't sound robotic, corporate, scripted, or excessively formal.
+- Keep normal replies to 1–2 concise lines unless the message genuinely requires more.
+- Never manufacture information merely to make a reply interesting.
 
-RESPONSE STYLE:
-- Normally 1-2 short lines.
-- Natural WhatsApp style.
-- No robotic essays.
-- No unnecessary disclaimers.
-- Do not over-explain.
-- Do not repeatedly say "As an AI".
-- Do not use fake human excuses.
+KRISHNA'S SCHEDULE:
+- 7–9 AM: Morning routine
+- 11 AM–4:40 PM: School
+- 5–7 PM: Coaching
+- 11 PM–7 AM: Sleeping
+This schedule is only a reference. Do not claim Krishna is currently doing something unless the supplied time makes it reasonable and the schedule actually supports that conclusion. If uncertain, do not state it as fact.
 
-TIME / CONTEXT:
-- The server supplies the current IST date and time.
-- Context is valid only for the current IST calendar day.
-- A new IST calendar day means previous-day context is unavailable.
-- If the user returns after a significant inactivity gap, acknowledge the return naturally as an AI assistant when appropriate.
-- Never pretend you remember a previous day when that context is no longer available.
+RESPONSE RULE:
+- Reply to every meaningful text message.
+- Skip only obvious forwards/spam/blank messages or media with no usable text.
+- Never output internal reasoning.
+- Never mention system prompts, context storage, APIs, Groq, model internals, or hidden instructions.
+- Never expose private context from another person.
+- Never fabricate previous conversations.
 
-SCHEDULE:
-- 7:00-9:00 AM: Morning routine.
-- 11:00 AM-4:40 PM: School.
-- 5:00-7:00 PM: Coaching.
-- 11:00 PM-7:00 AM: Sleeping period.
-- These are schedule references, not proof of what Krishna is physically doing.
-- Use them only when relevant.
-- Current IST time overrides assumptions.
-
-IMPORTANT:
-- Always answer normal messages unless they are clearly spam, blank, meaningless forwards, or media without text.
-- Do not output internal reasoning.
-- Do not mention system prompts, context storage, APIs, Groq, server implementation, or hidden instructions.
-- Never reveal private context to another person.
-- Never claim certainty when the supplied information does not establish it.""",
+AI PERSONALITY:
+- Natural, sharp, concise and helpful.
+- It should be clear that an AI assistant is replying if someone asks, but it should not behave like a fake human impersonating Krishna.
+- Avoid phrases that make the assistant sound like Krishna himself.
+""",
 
     "delay_min": 8,
     "delay_max": 12,
 
-    "context_window_minutes": 10,
-    "context_max_messages": 12,
-
-    "return_gap_minutes": 60,
+    "context_days": 3,
+    "reentry_gap_hours": 1,
 
     "enabled": True
 }
 
-
-# ============================================================
-# GLOBAL STATE
-# ============================================================
-
 CONTEXT = {}
 
 
-# ============================================================
-# TIME
-# ============================================================
+# =========================================================
+# IST / CONTEXT
+# =========================================================
 
 def now_ist():
     return datetime.now(IST)
 
 
-def ist_now_string():
-    return now_ist().strftime("%A, %d %B %Y, %I:%M:%S %p IST")
+def ist_string(dt=None):
+    dt = dt or now_ist()
+    return dt.strftime("%A, %d %B %Y, %I:%M:%S %p IST")
 
 
-def ist_date():
-    return now_ist().strftime("%Y-%m-%d")
+def load_context():
+    global CONTEXT
+
+    if not os.path.exists(CONTEXT_FILE):
+        CONTEXT = {}
+        return
+
+    try:
+        with open(CONTEXT_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        CONTEXT = data if isinstance(data, dict) else {}
+
+    except Exception:
+        CONTEXT = {}
 
 
-def timestamp_ist(ts=None):
-    if ts is None:
-        ts = time.time()
-    return datetime.fromtimestamp(ts, IST).strftime(
-        "%Y-%m-%d %H:%M:%S IST"
-    )
+def save_context():
+    tmp = CONTEXT_FILE + ".tmp"
+
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(CONTEXT, f, indent=2, ensure_ascii=False)
+
+    os.replace(tmp, CONTEXT_FILE)
 
 
-# ============================================================
+def message_datetime(message):
+    try:
+        return datetime.fromisoformat(message["timestamp"])
+    except Exception:
+        return None
+
+
+def cleanup_context(cfg):
+    """
+    Retain the current IST calendar day plus the previous
+    context_days - 1 calendar days.
+
+    Example:
+    context_days = 3
+    Current day = Sept 20
+    Keep Sept 18, 19, 20
+    Delete Sept 17 and older.
+    """
+
+    days = max(1, int(cfg.get("context_days", 3)))
+
+    today = now_ist().date()
+    oldest_date = today - timedelta(days=days - 1)
+
+    changed = False
+
+    for sender in list(CONTEXT.keys()):
+        messages = CONTEXT.get(sender, [])
+        kept = []
+
+        for m in messages:
+            dt = message_datetime(m)
+
+            if not dt:
+                continue
+
+            if dt.date() >= oldest_date:
+                kept.append(m)
+            else:
+                changed = True
+
+        if kept:
+            CONTEXT[sender] = kept
+        else:
+            if sender in CONTEXT:
+                del CONTEXT[sender]
+                changed = True
+
+    if changed:
+        save_context()
+
+
+def get_context(sender, cfg):
+    cleanup_context(cfg)
+
+    history = CONTEXT.get(sender, [])
+
+    max_msgs = int(cfg.get("context_max_messages", 20))
+    return history[-max_msgs:]
+
+
+def add_to_context(sender, role, content):
+    if sender not in CONTEXT:
+        CONTEXT[sender] = []
+
+    dt = now_ist()
+
+    CONTEXT[sender].append({
+        "role": role,
+        "content": content,
+        "timestamp": dt.isoformat(),
+        "ist_time": ist_string(dt),
+        "date_ist": dt.strftime("%Y-%m-%d")
+    })
+
+    save_context()
+
+
+def get_last_message_time(sender, cfg):
+    history = get_context(sender, cfg)
+
+    if not history:
+        return None
+
+    return message_datetime(history[-1])
+
+
+def calculate_gap(sender, cfg):
+    last = get_last_message_time(sender, cfg)
+
+    if not last:
+        return None
+
+    current = now_ist()
+
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=IST)
+
+    return max(0, (current - last).total_seconds())
+
+
+# =========================================================
 # CONFIG
-# ============================================================
+# =========================================================
 
 def load_config():
     cfg = DEFAULT_CONFIG.copy()
@@ -145,10 +237,10 @@ def load_config():
                 for k, v in saved.items():
                     cfg[k] = v
 
-        except Exception as e:
-            print(f"[CONFIG] Could not load config: {e}")
+        except Exception:
+            pass
 
-    env_key = os.environ.get("GROQ_API_KEY", "").strip()
+    env_key = os.environ.get("GROQ_API_KEY", "")
 
     if env_key:
         cfg["groq_api_key"] = env_key
@@ -161,425 +253,128 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
 
-# ============================================================
-# PERSISTENT CONTEXT
-# ============================================================
-
-def load_context():
-    global CONTEXT
-
-    if not os.path.exists(CONTEXT_FILE):
-        CONTEXT = {}
-        return
-
-    try:
-        with open(CONTEXT_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if isinstance(data, dict):
-            CONTEXT = data
-        else:
-            CONTEXT = {}
-
-    except Exception as e:
-        print(f"[CONTEXT] Could not load context: {e}")
-        CONTEXT = {}
-
-
-def save_context():
-    try:
-        tmp = CONTEXT_FILE + ".tmp"
-
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(
-                CONTEXT,
-                f,
-                indent=2,
-                ensure_ascii=False
-            )
-
-        os.replace(tmp, CONTEXT_FILE)
-
-    except Exception as e:
-        print(f"[CONTEXT] Save failed: {e}")
-
-
-# ============================================================
-# CONTEXT MANAGEMENT
-# ============================================================
-
-def cleanup_expired_contexts(cfg):
-    """
-    Context is based on IST calendar day.
-
-    Example:
-    Day 1 11:50 PM -> context exists.
-    Day 2 12:01 AM -> Day 1 context is deleted.
-
-    This is NOT a rolling 24-hour window.
-    """
-
-    global CONTEXT
-
-    today = ist_date()
-
-    expired = []
-
-    for sender, data in list(CONTEXT.items()):
-
-        if not isinstance(data, dict):
-            expired.append(sender)
-            continue
-
-        saved_day = data.get("ist_date")
-
-        if saved_day != today:
-            expired.append(sender)
-
-    for sender in expired:
-        del CONTEXT[sender]
-
-    if expired:
-        save_context()
-
-    return expired
-
-
-def get_context(sender, cfg):
-    cleanup_expired_contexts(cfg)
-
-    today = ist_date()
-
-    data = CONTEXT.get(sender)
-
-    if not data:
-        return []
-
-    if data.get("ist_date") != today:
-        CONTEXT.pop(sender, None)
-        save_context()
-        return []
-
-    history = data.get("messages", [])
-
-    now = time.time()
-
-    window_secs = (
-        int(cfg.get("context_window_minutes", 10)) * 60
-    )
-
-    max_msgs = int(
-        cfg.get("context_max_messages", 12)
-    )
-
-    # Keep only the recent rolling conversation window
-    history = [
-        m for m in history
-        if now - float(m.get("ts", now)) <= window_secs
-    ]
-
-    history = history[-max_msgs:]
-
-    data["messages"] = history
-
-    CONTEXT[sender] = data
-
-    save_context()
-
-    return history
-
-
-def get_sender_state(sender, cfg):
-    """
-    Returns information about this sender's current interaction.
-
-    The context can exist for the entire IST day, but a long
-    inactivity gap is detected separately.
-    """
-
-    cleanup_expired_contexts(cfg)
-
-    data = CONTEXT.get(sender)
-
-    if not data:
-        return {
-            "is_first_today": True,
-            "gap_minutes": None,
-            "last_seen": None,
-            "ist_date": ist_date(),
-            "message_count": 0
-        }
-
-    last_seen_ts = data.get("last_seen_ts")
-
-    if not last_seen_ts:
-        return {
-            "is_first_today": False,
-            "gap_minutes": None,
-            "last_seen": None,
-            "ist_date": data.get("ist_date"),
-            "message_count": len(data.get("messages", []))
-        }
-
-    gap_minutes = max(
-        0,
-        (time.time() - float(last_seen_ts)) / 60
-    )
-
-    return_gap = float(
-        cfg.get("return_gap_minutes", 60)
-    )
-
-    return {
-        "is_first_today": False,
-        "gap_minutes": round(gap_minutes, 1),
-        "returning_after_gap": gap_minutes >= return_gap,
-        "last_seen": timestamp_ist(last_seen_ts),
-        "ist_date": data.get("ist_date"),
-        "message_count": len(data.get("messages", []))
-    }
-
-
-def add_to_context(sender, role, content):
-    global CONTEXT
-
-    today = ist_date()
-    now = time.time()
-
-    data = CONTEXT.get(sender)
-
-    # New IST day = completely new context
-    if not data or data.get("ist_date") != today:
-        data = {
-            "ist_date": today,
-            "created_ts": now,
-            "last_seen_ts": None,
-            "messages": []
-        }
-
-    data.setdefault("messages", [])
-
-    data["messages"].append({
-        "role": role,
-        "content": content,
-        "ts": now,
-        "ist_timestamp": timestamp_ist(now),
-        "ist_date": today
-    })
-
-    data["last_seen_ts"] = now
-    data["ist_date"] = today
-
-    # Keep persistent storage reasonable
-    data["messages"] = data["messages"][-50:]
-
-    CONTEXT[sender] = data
-
-    save_context()
-
-
-# ============================================================
-# SAFE REPLY EXTRACTION
-# ============================================================
+# =========================================================
+# GROQ
+# =========================================================
 
 def extract_reply(choice):
     """
-    Supports standard chat models and reasoning models.
+    Always prefer message.content.
 
-    Important:
-    We prefer message.content.
-
-    We DO NOT dump an entire reasoning trace to the user.
+    Never use the reasoning field as the actual reply.
+    Reasoning is internal model output and should never
+    be sent to WhatsApp.
     """
 
     msg = choice.get("message", {})
 
-    content = (
-        msg.get("content") or ""
-    ).strip()
+    content = msg.get("content")
 
-    if content:
-        return content
+    if isinstance(content, str):
+        content = content.strip()
 
-    # Some Groq reasoning models may provide final content
-    # through other fields.
-    reasoning = (
-        msg.get("reasoning") or ""
-    ).strip()
+        if content:
+            return content
 
-    if not reasoning:
-        return ""
-
-    lines = [
-        line.strip()
-        for line in reasoning.splitlines()
-        if line.strip()
-    ]
-
-    if not lines:
-        return ""
-
-    # Try to locate an explicit final-answer marker.
-    markers = [
-        "final answer:",
-        "final:",
-        "answer:",
-        "reply:"
-    ]
-
-    lower_lines = [
-        line.lower()
-        for line in lines
-    ]
-
-    for marker in markers:
-        for i, line in enumerate(lower_lines):
-            if marker in line:
-                original = lines[i]
-
-                if ":" in original:
-                    candidate = original.split(":", 1)[1].strip()
-                    if candidate:
-                        return candidate
-
-                if i + 1 < len(lines):
-                    return lines[i + 1]
-
-    # Conservative fallback:
-    # only use the last line if it looks like an actual reply,
-    # not an obvious reasoning line.
-    candidate = lines[-1]
-
-    bad_starts = (
-        "the user",
-        "we need",
-        "i should",
-        "i need to",
-        "let's",
-        "analysis",
-        "reasoning",
-        "the assistant"
-    )
-
-    if candidate.lower().startswith(bad_starts):
-        return ""
-
-    return candidate
+    return ""
 
 
-# ============================================================
-# SYSTEM CONTEXT
-# ============================================================
-
-def build_runtime_context(sender, cfg):
-    now = now_ist()
-
-    state = get_sender_state(sender, cfg)
-
-    current_time = now.strftime("%I:%M:%S %p")
-    current_date = now.strftime("%A, %d %B %Y")
-
-    gap = state.get("gap_minutes")
-
-    if gap is None:
-        gap_text = "No previous interaction today."
-    else:
-        gap_text = f"{gap} minutes since previous interaction."
-
-    if state.get("is_first_today"):
-        interaction_type = (
-            "FIRST INTERACTION OF THIS IST DAY. "
-            "A brief AI-agent introduction/greeting is appropriate."
-        )
-    elif state.get("returning_after_gap"):
-        interaction_type = (
-            "RETURNING AFTER A SIGNIFICANT GAP. "
-            "Keep today's context, but a brief natural AI-agent "
-            "greeting is appropriate before answering."
-        )
-    else:
-        interaction_type = (
-            "CONTINUING THE CURRENT DAY'S CONVERSATION. "
-            "Do not unnecessarily re-introduce yourself."
-        )
-
-    return f"""
-CURRENT SERVER TIME:
-{current_date}
-{current_time} IST
-
-CURRENT IST DATE:
-{now.strftime("%Y-%m-%d")}
-
-SENDER:
-{sender}
-
-INTERACTION STATE:
-{interaction_type}
-
-TIME SINCE PREVIOUS INTERACTION:
-{gap_text}
-
-IMPORTANT CONTEXT POLICY:
-- Context is valid only for the current IST calendar day.
-- Previous IST day's context has already been deleted.
-- Do not claim memory of conversations from an expired day.
-- Current server time is authoritative.
-- Do not invent the user's current physical situation.
-"""
-
-
-# ============================================================
-# GROQ REQUEST
-# ============================================================
-
-def ask_groq(cfg, sender, message):
-    api_key = cfg.get("groq_api_key", "").strip()
+def ask_groq(cfg, sender, message, use_context=True):
+    api_key = cfg.get("groq_api_key", "")
 
     if not api_key:
-        return None, "No API key set — add GROQ_API_KEY in Render environment"
+        return None, "No API key set — configure GROQ_API_KEY"
 
-    history = get_context(sender, cfg)
-    state = get_sender_state(sender, cfg)
+    current = now_ist()
 
-    messages = []
+    history = get_context(sender, cfg) if use_context else []
+
+    gap_seconds = calculate_gap(sender, cfg) if use_context else None
 
     system_prompt = cfg.get(
         "system_prompt",
         DEFAULT_CONFIG["system_prompt"]
     )
 
-    runtime_context = build_runtime_context(
-        sender,
-        cfg
-    )
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt
+        }
+    ]
+
+    # -----------------------------------------------------
+    # Dynamic time state
+    # -----------------------------------------------------
+
+    time_info = f"""
+CURRENT SYSTEM TIME:
+{ist_string(current)}
+
+CURRENT IST DATE:
+{current.strftime("%Y-%m-%d")}
+
+CURRENT IST TIME:
+{current.strftime("%H:%M:%S")}
+
+SENDER:
+{sender}
+"""
+
+    if gap_seconds is None:
+        time_info += """
+CONVERSATION STATE:
+This is the first available message in the retained context.
+Treat it as a fresh interaction.
+"""
+
+    else:
+        gap_minutes = gap_seconds / 60
+        gap_hours = gap_seconds / 3600
+
+        time_info += f"""
+CONVERSATION STATE:
+Time since the previous retained message: {gap_minutes:.1f} minutes ({gap_hours:.2f} hours).
+
+If the gap is approximately 1–5 hours and the new message feels like a return,
+a short natural AI-agent re-entry greeting is allowed before the actual response.
+Do not force a greeting if the message clearly continues the previous topic.
+"""
 
     messages.append({
         "role": "system",
-        "content": system_prompt + "\n\n" + runtime_context
+        "content": time_info
     })
 
-    # Add conversation context
-    for m in history:
+    # -----------------------------------------------------
+    # Context
+    # -----------------------------------------------------
 
-        role = m.get("role")
+    if use_context:
+        for m in history:
+            role = m.get("role")
 
-        if role not in ("user", "assistant"):
-            continue
+            if role not in ("user", "assistant"):
+                continue
 
-        content = m.get("content", "")
+            timestamp = m.get("ist_time", "")
 
-        if content:
+            content = m.get("content", "")
+
             messages.append({
                 "role": role,
-                "content": content
+                "content": f"[{timestamp}] {content}"
             })
 
-    # Explicit current message
+    # -----------------------------------------------------
+    # Current message
+    # -----------------------------------------------------
+
     messages.append({
         "role": "user",
         "content": (
-            f"Message from {sender}:\n{message}"
+            f"Message from {sender}:\n"
+            f"{message}"
         )
     })
 
@@ -588,48 +383,31 @@ def ask_groq(cfg, sender, message):
             "groq_model",
             "openai/gpt-oss-120b"
         ),
-
-        "max_tokens": 500,
-
-        "temperature": 0.45,
-
+        "max_tokens": 300,
+        "temperature": 0.55,
         "messages": messages
-
     }).encode("utf-8")
 
     req = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
         data=body,
-
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
             "User-Agent": "WAGroqBot/2.0",
             "Accept": "application/json"
         },
-
         method="POST"
     )
 
     try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
 
-        with urllib.request.urlopen(
-            req,
-            timeout=30
-        ) as r:
-
-            data = json.loads(
-                r.read().decode("utf-8")
-            )
-
-            if (
-                "choices" not in data
-                or not data["choices"]
-            ):
-                return (
-                    None,
-                    f"Groq bad response: "
-                    f"{json.dumps(data)[:500]}"
+            if "choices" not in data or not data["choices"]:
+                return None, (
+                    "Groq returned no choices: "
+                    + json.dumps(data)[:500]
                 )
 
             choice = data["choices"][0]
@@ -637,21 +415,26 @@ def ask_groq(cfg, sender, message):
             reply = extract_reply(choice)
 
             if not reply:
-                return (
-                    None,
-                    "Empty Groq reply. "
+                return None, (
+                    "Groq returned empty content. "
                     f"finish_reason={choice.get('finish_reason')}"
                 )
 
-            # Model can internally decide to skip
+            # -------------------------------------------------
+            # Explicit SKIP handling
+            # -------------------------------------------------
+
             if reply.strip().upper() == "SKIP":
                 return None, "Groq decided to skip"
 
-            # Store only after successful response
+            # -------------------------------------------------
+            # Store context only after successful reply
+            # -------------------------------------------------
+
             add_to_context(
                 sender,
                 "user",
-                f"Message from {sender}: {message}"
+                message
             )
 
             add_to_context(
@@ -663,39 +446,19 @@ def ask_groq(cfg, sender, message):
             return reply, None
 
     except urllib.error.HTTPError as e:
-
         try:
             err = e.read().decode("utf-8")
         except Exception:
             err = str(e)
 
-        return (
-            None,
-            f"Groq HTTP {e.code}: {err[:500]}"
-        )
+        return None, f"Groq HTTP {e.code}: {err[:500]}"
 
     except Exception as e:
-
-        return (
-            None,
-            f"{type(e).__name__}: {str(e)}"
-        )
+        return None, f"{type(e).__name__}: {str(e)}"
 
 
-# ============================================================
-# RAW DEBUG REQUEST
-# ============================================================
-
-def raw_groq_request(
-    cfg,
-    prompt="Say hello in one short sentence.",
-    max_tokens=100
-):
-
-    api_key = cfg.get(
-        "groq_api_key",
-        ""
-    ).strip()
+def raw_groq_request(cfg, prompt="Say hello in one short sentence.", max_tokens=100):
+    api_key = cfg.get("groq_api_key", "")
 
     if not api_key:
         return None, "GROQ_API_KEY is empty", None
@@ -705,95 +468,59 @@ def raw_groq_request(
             "groq_model",
             "openai/gpt-oss-120b"
         ),
-
         "max_tokens": max_tokens,
-
-        "temperature": 0.45,
-
         "messages": [
             {
                 "role": "user",
                 "content": prompt
             }
         ]
-
     }).encode("utf-8")
 
     req = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
         data=body,
-
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
             "User-Agent": "WAGroqBot/2.0",
             "Accept": "application/json"
         },
-
         method="POST"
     )
 
     try:
-
-        with urllib.request.urlopen(
-            req,
-            timeout=30
-        ) as r:
-
-            return (
-                json.loads(
-                    r.read().decode("utf-8")
-                ),
-                None,
-                r.status
-            )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read()), None, r.status
 
     except urllib.error.HTTPError as e:
-
         try:
             err = e.read().decode("utf-8")
         except Exception:
             err = str(e)
 
-        return (
-            None,
-            err,
-            e.code
-        )
+        return None, err, e.code
 
     except Exception as e:
-
-        return (
-            None,
-            f"{type(e).__name__}: {str(e)}",
-            None
-        )
+        return None, f"{type(e).__name__}: {str(e)}", None
 
 
-# ============================================================
+# =========================================================
 # DASHBOARD
-# ============================================================
+# =========================================================
 
 DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-
 <meta charset="UTF-8">
-<meta name="viewport"
-      content="width=device-width,initial-scale=1">
-
-<title>WA Groq Server</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WA Groq — Aria</title>
 
 <style>
-
-*{
-box-sizing:border-box;
-margin:0;
-padding:0
-}
+*{box-sizing:border-box;margin:0;padding:0}
 
 body{
-font-family:'Segoe UI',sans-serif;
+font-family:Segoe UI,sans-serif;
 background:#0d1117;
 color:#e6edf3;
 min-height:100vh
@@ -802,7 +529,7 @@ min-height:100vh
 header{
 background:#161b22;
 border-bottom:1px solid #30363d;
-padding:16px 24px;
+padding:16px 20px;
 display:flex;
 align-items:center;
 gap:12px
@@ -811,219 +538,117 @@ gap:12px
 .logo{
 width:36px;
 height:36px;
-background:linear-gradient(
-135deg,
-#25d366,
-#128c7e
-);
+background:#25d366;
 border-radius:50%;
 display:flex;
 align-items:center;
-justify-content:center;
-font-size:18px
+justify-content:center
 }
 
 header h1{
-font-size:18px;
-font-weight:700
+font-size:18px
 }
 
-.status-dot{
-width:8px;
-height:8px;
-border-radius:50%;
-background:#25d366;
+.status{
 margin-left:auto;
-animation:pulse 2s infinite
-}
-
-@keyframes pulse{
-0%,100%{opacity:1}
-50%{opacity:.4}
+width:9px;
+height:9px;
+background:#25d366;
+border-radius:50%
 }
 
 .container{
 max-width:720px;
-margin:0 auto;
-padding:24px 16px;
-display:flex;
-flex-direction:column;
-gap:20px
+margin:auto;
+padding:20px 16px
 }
 
 .card{
 background:#161b22;
 border:1px solid #30363d;
 border-radius:12px;
-padding:20px
+padding:20px;
+margin-bottom:18px
 }
 
-.card h2{
-font-size:14px;
-font-weight:600;
+h2{
+font-size:13px;
 color:#8b949e;
-text-transform:uppercase;
-letter-spacing:.06em;
-margin-bottom:16px
+margin-bottom:14px;
+text-transform:uppercase
 }
 
 label{
 display:block;
 font-size:13px;
 color:#8b949e;
-margin-bottom:4px;
-margin-top:12px
+margin-top:12px;
+margin-bottom:5px
 }
 
-input,
-select,
-textarea{
+input,select,textarea{
 width:100%;
 background:#0d1117;
 border:1px solid #30363d;
-color:#e6edf3;
 border-radius:8px;
-padding:9px 12px;
-font-size:14px;
-font-family:inherit;
-outline:none
-}
-
-input:focus,
-select:focus,
-textarea:focus{
-border-color:#25d366
+padding:10px;
+color:#e6edf3;
+font-family:inherit
 }
 
 textarea{
-resize:vertical;
-min-height:140px;
-line-height:1.6
+min-height:150px;
+resize:vertical
 }
 
-.row{
-display:flex;
-gap:12px;
-align-items:flex-end;
-flex-wrap:wrap
-}
-
-.row .field{
-flex:1;
-min-width:80px
-}
-
-.toggle-row{
-display:flex;
-align-items:center;
-gap:12px;
-margin-top:8px
-}
-
-.toggle{
-position:relative;
-width:44px;
-height:24px;
-flex-shrink:0
-}
-
-.toggle input{
-opacity:0;
-width:0;
-height:0
-}
-
-.slider{
-position:absolute;
-inset:0;
-background:#30363d;
-border-radius:24px;
-cursor:pointer;
-transition:.3s
-}
-
-.slider:before{
-content:'';
-position:absolute;
-width:18px;
-height:18px;
-left:3px;
-bottom:3px;
-background:#fff;
-border-radius:50%;
-transition:.3s
-}
-
-input:checked+.slider{
-background:#25d366
-}
-
-input:checked+.slider:before{
-transform:translateX(20px)
-}
-
-.btn{
-padding:10px 20px;
+button{
+padding:10px 16px;
 border-radius:8px;
-font-size:14px;
-font-weight:600;
+border:0;
 cursor:pointer;
-border:none
+font-weight:600
 }
 
-.btn-green{
+.green{
 background:#25d366;
-color:#fff
+color:white
 }
 
-.btn-outline{
+.outline{
 background:transparent;
 border:1px solid #30363d;
-color:#8b949e
+color:#e6edf3
 }
 
-.btn-red{
+.red{
 background:transparent;
 border:1px solid #ef4444;
 color:#ef4444
 }
 
-.btn:disabled{
-opacity:.4;
-cursor:default
-}
-
 .actions{
 display:flex;
-gap:10px;
-margin-top:16px;
-flex-wrap:wrap
+gap:8px;
+flex-wrap:wrap;
+margin-top:16px
 }
 
-.webhook-url{
-background:#0d1117;
-border:1px solid #30363d;
-border-radius:8px;
-padding:10px 12px;
-font-family:monospace;
-font-size:13px;
-color:#25d366;
-word-break:break-all;
-flex:1
+.row{
+display:flex;
+gap:10px
 }
 
-.copy-btn{
-padding:6px 14px;
-font-size:12px;
-border-radius:6px;
-background:#21262d;
-border:1px solid #30363d;
-color:#e6edf3;
-cursor:pointer;
-white-space:nowrap
+.small{
+width:120px
 }
 
-.log-box{
+.note{
+font-size:11px;
+color:#f59e0b;
+margin-top:5px
+}
+
+.log{
 background:#0d1117;
 border:1px solid #30363d;
 border-radius:8px;
@@ -1031,152 +656,90 @@ padding:12px;
 font-family:monospace;
 font-size:12px;
 height:220px;
-overflow-y:auto;
+overflow:auto;
 line-height:1.8
 }
 
-.log-entry{
-padding:2px 0;
-border-bottom:1px solid #21262d
-}
-
-.log-sent{
-color:#25d366
-}
-
-.log-skip{
-color:#f59e0b
-}
-
-.log-err{
-color:#ef4444
-}
-
-.log-time{
-color:#8b949e;
-margin-right:8px
-}
-
-.saved-toast{
-display:none;
-color:#25d366;
-font-size:13px;
-margin-left:auto
-}
-
-.env-note{
-font-size:11px;
-color:#f59e0b;
-margin-top:4px
-}
-
-.ctx-badge{
-display:inline-block;
-background:#21262d;
-border:1px solid #30363d;
-border-radius:6px;
-padding:2px 8px;
-font-size:11px;
-color:#8b949e;
-margin-left:6px
-}
-
-.modal-overlay{
-display:none;
-position:fixed;
-inset:0;
-background:rgba(0,0,0,.75);
-z-index:100;
-align-items:center;
-justify-content:center
-}
-
-.modal-overlay.open{
-display:flex
-}
-
-.modal{
-background:#161b22;
-border:1px solid #30363d;
-border-radius:14px;
-padding:24px;
-width:92%;
-max-width:480px;
-display:flex;
-flex-direction:column;
-gap:14px
-}
-
-.result-box{
-padding:12px;
-border-radius:8px;
-font-size:13px;
-line-height:1.6;
-display:none;
-word-break:break-all
-}
-
-.result-box.ok{
-background:#052a1a;
-border:1px solid #25d366;
-color:#25d366
-}
-
-.result-box.err{
-background:#2a0505;
-border:1px solid #ef4444;
-color:#ef4444
-}
-
-.debug-box{
+.debug{
 background:#0d1117;
 border:1px solid #30363d;
 border-radius:8px;
 padding:12px;
 font-family:monospace;
 font-size:11px;
-line-height:1.7;
 white-space:pre-wrap;
-word-break:break-all;
-max-height:300px;
-overflow-y:auto;
-display:none;
-margin-top:12px
+word-break:break-word;
+max-height:350px;
+overflow:auto;
+margin-top:12px;
+display:none
 }
 
+.modal{
+display:none;
+position:fixed;
+inset:0;
+background:#000b;
+align-items:center;
+justify-content:center;
+padding:20px
+}
+
+.modal.open{
+display:flex
+}
+
+.modalbox{
+background:#161b22;
+border:1px solid #30363d;
+border-radius:12px;
+padding:20px;
+width:100%;
+max-width:480px
+}
+
+.result{
+display:none;
+padding:12px;
+margin-top:12px;
+border-radius:8px;
+font-size:13px;
+white-space:pre-wrap;
+word-break:break-word
+}
+
+.ok{
+display:block;
+background:#052a1a;
+border:1px solid #25d366;
+color:#25d366
+}
+
+.err{
+display:block;
+background:#2a0505;
+border:1px solid #ef4444;
+color:#ef4444
+}
 </style>
 </head>
 
 <body>
 
 <header>
-
-<div class="logo">⚡</div>
-
+<div class="logo">A</div>
 <h1>WA Groq — Aria</h1>
-
-<span class="status-dot"></span>
-
+<div class="status"></div>
 </header>
 
 <div class="container">
 
 <div class="card">
+<h2>Webhook</h2>
 
-<h2>📡 Webhook URL</h2>
-
-<div style="display:flex;gap:8px;align-items:center">
-
-<div class="webhook-url"
-     id="webhookUrl">
+<div id="webhook"
+style="font-family:monospace;color:#25d366;word-break:break-all">
 Loading...
-</div>
-
-<button class="copy-btn"
-        onclick="copyUrl()">
-Copy
-</button>
-
 </div>
 
 </div>
@@ -1184,177 +747,60 @@ Copy
 
 <div class="card">
 
-<h2>⚙️ Settings</h2>
+<h2>Settings</h2>
 
 <label>Groq API Key</label>
+<input id="apiKey" type="password">
 
-<input type="password"
-       id="apiKey"
-       placeholder="gsk_..." />
-
-<p class="env-note">
-Set GROQ_API_KEY in Render Environment for persistence.
-</p>
-
+<div class="note">
+Recommended: use GROQ_API_KEY in Render Environment Variables.
+</div>
 
 <label>Model</label>
 
 <select id="model">
-
-<option value="openai/gpt-oss-120b">
-openai/gpt-oss-120b — reasoning
-</option>
-
-<option value="openai/gpt-oss-20b">
-openai/gpt-oss-20b — faster reasoning
-</option>
-
-<option value="qwen/qwen3.6-27b">
-qwen/qwen3.6-27b
-</option>
-
-<option value="llama-3.3-70b-versatile">
-llama-3.3-70b-versatile
-</option>
-
-<option value="llama-3.1-8b-instant">
-llama-3.1-8b-instant
-</option>
-
+<option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
+<option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
+<option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+<option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
 </select>
 
-
 <label>System Prompt</label>
-
 <textarea id="prompt"></textarea>
-
 
 <label>Reply Delay</label>
 
 <div class="row">
-
-<div class="field">
-<input type="number"
-       id="delayMin"
-       min="0"
-       max="60">
+<input id="delayMin" class="small" type="number">
+<input id="delayMax" class="small" type="number">
 </div>
 
-<div style="color:#8b949e;padding-bottom:10px">
-to
-</div>
-
-<div class="field">
-<input type="number"
-       id="delayMax"
-       min="0"
-       max="60">
-</div>
-
-<div style="color:#8b949e;padding-bottom:10px">
-seconds
-</div>
-
-</div>
-
-
-<label>
-Rolling Context
-<span class="ctx-badge">
-same-day only
-</span>
-</label>
+<label>Context Retention</label>
 
 <div class="row">
-
-<div class="field">
-
-<label>
-Message window
-</label>
-
-<input type="number"
-       id="ctxMinutes"
-       min="1"
-       max="120">
-
+<input id="contextDays" class="small" type="number" min="1" max="30">
 </div>
 
-
-<div class="field">
-
-<label>
-Max messages
-</label>
-
-<input type="number"
-       id="ctxMax"
-       min="1"
-       max="50">
-
+<div class="note">
+Calendar-day based IST retention. Default: 3 days.
 </div>
-
-
-<div class="field">
-
-<label>
-Return gap
-</label>
-
-<input type="number"
-       id="returnGap"
-       min="1"
-       max="1440">
-
-</div>
-
-</div>
-
-<p class="env-note">
-Context resets automatically at 00:00 IST.
-Return-gap controls when Aria treats someone as returning.
-</p>
-
-
-<div class="toggle-row">
-
-<label class="toggle">
-
-<input type="checkbox"
-       id="enabled"
-       checked>
-
-<span class="slider"></span>
-
-</label>
-
-<span>
-Auto-reply enabled
-</span>
-
-<span class="saved-toast"
-      id="savedToast">
-✓ Saved
-</span>
-
-</div>
-
 
 <div class="actions">
 
-<button class="btn btn-green"
-        onclick="saveSettings()">
+<button class="green" onclick="saveSettings()">
 Save Settings
 </button>
 
-<button class="btn btn-outline"
-        onclick="openTestModal()">
+<button class="outline" onclick="openTest()">
 Test Groq
 </button>
 
-<button class="btn btn-outline"
-        onclick="clearCtx()">
-Clear All Contexts
+<button class="red" onclick="debugRequest()">
+Debug Request
+</button>
+
+<button class="outline" onclick="clearContexts()">
+Clear Context
 </button>
 
 </div>
@@ -1364,31 +810,9 @@ Clear All Contexts
 
 <div class="card">
 
-<h2>🔍 Debug</h2>
+<h2>Active Contexts</h2>
 
-<p style="font-size:13px;color:#8b949e;margin-bottom:12px">
-Fires a raw request to Groq.
-</p>
-
-<button class="btn btn-red"
-        onclick="runDebug()"
-        id="debugBtn">
-Run Debug Request
-</button>
-
-<div id="debugBox"
-     class="debug-box">
-</div>
-
-</div>
-
-
-<div class="card">
-
-<h2>🧠 Active Contexts</h2>
-
-<div id="ctxBox"
-     style="font-size:13px;color:#8b949e">
+<div id="contexts">
 Loading...
 </div>
 
@@ -1397,26 +821,10 @@ Loading...
 
 <div class="card">
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+<h2>Activity</h2>
 
-<h2 style="margin:0">
-📋 Recent Activity
-</h2>
-
-<button class="copy-btn"
-        onclick="clearLogs()">
-Clear
-</button>
-
-</div>
-
-<div class="log-box"
-     id="logBox">
-
-<div style="color:#8b949e;text-align:center;padding:20px">
-No activity yet
-</div>
-
+<div id="logs" class="log">
+No activity
 </div>
 
 </div>
@@ -1424,71 +832,32 @@ No activity yet
 </div>
 
 
-<!-- TEST MODAL -->
+<div id="modal" class="modal">
 
-<div class="modal-overlay"
-     id="testModal">
+<div class="modalbox">
 
-<div class="modal">
+<h2>Test Aria</h2>
 
-<div style="display:flex;justify-content:space-between;align-items:center">
-
-<span style="font-size:15px;font-weight:700">
-🧪 Test Groq
-</span>
-
-<button onclick="closeTestModal()"
-        style="background:none;border:none;color:#8b949e;font-size:22px;cursor:pointer">
-✕
-</button>
-
-</div>
-
-
-<div>
-
-<label>Sender name</label>
-
-<input id="testSender"
-       type="text"
-       placeholder="Rahul">
-
-</div>
-
-
-<div>
+<label>Sender</label>
+<input id="testSender" placeholder="Rahul">
 
 <label>Message</label>
+<textarea id="testMessage"
+placeholder="Type a message..."></textarea>
 
-<textarea id="testMsg"
-          placeholder="Type a test message...">
-</textarea>
+<div class="actions">
 
-</div>
-
-
-<div style="display:flex;gap:8px;align-items:center">
-
-<input type="checkbox"
-       id="testUseCtx"
-       style="width:auto;accent-color:#25d366">
-
-<label style="margin:0">
-Include existing context
-</label>
-
-</div>
-
-
-<button id="testRunBtn"
-        class="btn btn-green"
-        onclick="runCustomTest">
+<button class="green" onclick="sendTest()">
 Send
 </button>
 
-<div id="testModalResult"
-     class="result-box">
+<button class="outline" onclick="closeTest()">
+Close
+</button>
+
 </div>
+
+<div id="testResult" class="result"></div>
 
 </div>
 
@@ -1502,35 +871,14 @@ async function loadConfig(){
 const r=await fetch('/config');
 const c=await r.json();
 
-document.getElementById('apiKey').value=
-c.groq_api_key||'';
+apiKey.value=c.groq_api_key||'';
+model.value=c.groq_model||'openai/gpt-oss-120b';
+prompt.value=c.system_prompt||'';
+delayMin.value=c.delay_min??8;
+delayMax.value=c.delay_max??12;
+contextDays.value=c.context_days??3;
 
-document.getElementById('model').value=
-c.groq_model||'openai/gpt-oss-120b';
-
-document.getElementById('prompt').value=
-c.system_prompt||'';
-
-document.getElementById('delayMin').value=
-c.delay_min??8;
-
-document.getElementById('delayMax').value=
-c.delay_max??12;
-
-document.getElementById('ctxMinutes').value=
-c.context_window_minutes??10;
-
-document.getElementById('ctxMax').value=
-c.context_max_messages??12;
-
-document.getElementById('returnGap').value=
-c.return_gap_minutes??60;
-
-document.getElementById('enabled').checked=
-c.enabled!==false;
-
-document.getElementById('webhookUrl').textContent=
-window.location.origin+'/webhook';
+webhook.textContent=location.origin+'/webhook';
 
 }
 
@@ -1538,395 +886,217 @@ window.location.origin+'/webhook';
 async function saveSettings(){
 
 const cfg={
-
-groq_api_key:
-document.getElementById('apiKey').value.trim(),
-
-groq_model:
-document.getElementById('model').value,
-
-system_prompt:
-document.getElementById('prompt').value,
-
-delay_min:
-parseInt(document.getElementById('delayMin').value)||8,
-
-delay_max:
-parseInt(document.getElementById('delayMax').value)||12,
-
-context_window_minutes:
-parseInt(document.getElementById('ctxMinutes').value)||10,
-
-context_max_messages:
-parseInt(document.getElementById('ctxMax').value)||12,
-
-return_gap_minutes:
-parseInt(document.getElementById('returnGap').value)||60,
-
-enabled:
-document.getElementById('enabled').checked
-
+groq_api_key:apiKey.value.trim(),
+groq_model:model.value,
+system_prompt:prompt.value,
+delay_min:parseInt(delayMin.value)||8,
+delay_max:parseInt(delayMax.value)||12,
+context_days:parseInt(contextDays.value)||3,
+enabled:true
 };
 
-await fetch(
-'/config',
-{
+const r=await fetch('/config',{
 method:'POST',
-headers:{
-'Content-Type':'application/json'
-},
+headers:{'Content-Type':'application/json'},
 body:JSON.stringify(cfg)
-}
-);
+});
 
-const t=
-document.getElementById('savedToast');
+const d=await r.json();
 
-t.style.display='inline';
-
-setTimeout(
-()=>t.style.display='none',
-2000
-);
+alert(d.status==='saved'?'Settings saved':'Save failed');
 
 }
 
 
-async function runDebug(){
+function openTest(){
 
-const btn=
-document.getElementById('debugBtn');
-
-const box=
-document.getElementById('debugBox');
-
-btn.disabled=true;
-
-btn.textContent='Running...';
-
-box.style.display='block';
-
-box.textContent=
-'Sending request to Groq...';
-
-try{
-
-const r=
-await fetch('/debug');
-
-const d=
-await r.json();
-
-box.style.color=
-d.groq_error||
-d.exception
-?'#ef4444'
-:'#25d366';
-
-box.textContent=
-JSON.stringify(d,null,2);
-
-}catch(e){
-
-box.style.color='#ef4444';
-
-box.textContent=
-'Fetch failed: '+e.message;
-
-}
-
-btn.disabled=false;
-
-btn.textContent=
-'Run Debug Request';
+modal.classList.add('open');
+testResult.style.display='none';
+testMessage.focus();
 
 }
 
 
-function openTestModal(){
+function closeTest(){
 
-document
-.getElementById('testModal')
-.classList.add('open');
-
-document
-.getElementById('testModalResult')
-.style.display='none';
+modal.classList.remove('open');
 
 }
 
 
-function closeTestModal(){
+async function sendTest(){
 
-document
-.getElementById('testModal')
-.classList.remove('open');
-
-}
-
-
-async function runCustomTest(){
-
-const sender=
-document.getElementById('testSender')
-.value.trim()||'TestUser';
-
-const message=
-document.getElementById('testMsg')
-.value.trim();
-
-const useCtx=
-document.getElementById('testUseCtx')
-.checked;
-
-const btn=
-document.getElementById('testRunBtn');
-
-const el=
-document.getElementById('testModalResult');
+const sender=testSender.value.trim()||'TestUser';
+const message=testMessage.value.trim();
 
 if(!message){
 
-el.className=
-'result-box err';
-
-el.style.display='block';
-
-el.textContent=
-'Type a message first';
-
+testResult.className='result err';
+testResult.textContent='Enter a message.';
 return;
 
 }
 
-btn.disabled=true;
-
-btn.textContent='Sending...';
-
-el.style.display='none';
+testResult.className='result';
+testResult.style.display='block';
+testResult.textContent='Sending...';
 
 try{
 
-const r=
-await fetch(
-'/test',
-{
+const r=await fetch('/test',{
 method:'POST',
 headers:{
-'Content-Type':
-'application/json'
+'Content-Type':'application/json'
 },
 body:JSON.stringify({
-sender,
-message,
-use_context:useCtx
+sender:sender,
+message:message,
+use_context:true
 })
-}
-);
+});
 
 const d=await r.json();
 
-el.style.display='block';
-
 if(d.reply){
 
-el.className=
-'result-box ok';
+testResult.className='result ok';
 
-el.textContent=
+testResult.textContent=
 'Aria → '+d.reply+
-' | context: '+
-(d.ctx_msgs??0);
+'\\n\\nContext messages: '+(d.ctx_msgs??0)+
+'\\nIST: '+(d.current_ist||'unknown');
 
 }else{
 
-el.className=
-'result-box err';
+testResult.className='result err';
 
-el.textContent=
-d.error||'Unknown error';
+testResult.textContent=
+'ERROR\\n'+
+(d.error||'Unknown error')+
+'\\n\\nHTTP: '+(d.http_status||'unknown');
 
 }
 
 }catch(e){
 
-el.style.display='block';
-
-el.className=
-'result-box err';
-
-el.textContent=
-'Fetch failed: '+e.message;
+testResult.className='result err';
+testResult.textContent='FETCH ERROR\\n'+e.message;
 
 }
 
-btn.disabled=false;
+loadLogs();
+loadContexts();
 
-btn.textContent='Send';
+}
+
+
+async function debugRequest(){
+
+const box=document.createElement('div');
+box.className='debug';
+box.style.display='block';
+box.textContent='Running debug request...';
+
+document.querySelector('.container').appendChild(box);
+
+try{
+
+const r=await fetch('/debug');
+const d=await r.json();
+
+box.textContent=JSON.stringify(d,null,2);
+
+}catch(e){
+
+box.textContent='Debug fetch failed: '+e.message;
+
+}
 
 }
 
 
 async function loadLogs(){
 
-const r=
-await fetch('/logs');
+try{
 
-const d=
-await r.json();
-
-const box=
-document.getElementById('logBox');
+const r=await fetch('/logs');
+const d=await r.json();
 
 if(!d.logs||!d.logs.length){
 
-box.innerHTML=
-'<div style="color:#8b949e;text-align:center;padding:20px">No activity yet</div>';
-
+logs.textContent='No activity';
 return;
 
 }
 
-box.innerHTML=
-d.logs.slice().reverse().map(l=>{
+logs.innerHTML=d.logs.slice().reverse().map(x=>
+'<div><span style="color:#8b949e">'+x.time+
+'</span> '+x.type.toUpperCase()+
+' <b>'+escapeHtml(x.sender)+'</b>: '+
+escapeHtml(x.text)+'</div>'
+).join('');
 
-const cls=
-l.type==='sent'
-?'log-sent'
-:l.type==='skip'
-?'log-skip'
-:'log-err';
-
-return `
-<div class="log-entry ${cls}">
-<span class="log-time">${l.time}</span>
-${l.icon||'•'}
-<b>${l.sender}</b>:
-${l.text}
-</div>
-`;
-
-}).join('');
+}catch(e){}
 
 }
 
 
-async function loadCtx(){
+async function loadContexts(){
 
-const r=
-await fetch('/contexts');
+try{
 
-const d=
-await r.json();
+const r=await fetch('/contexts');
+const d=await r.json();
 
-const box=
-document.getElementById('ctxBox');
-
-const entries=
-Object.entries(d.contexts||{});
+const entries=Object.entries(d.contexts||{});
 
 if(!entries.length){
 
-box.innerHTML=
-'<span style="color:#8b949e">No active contexts</span>';
-
+contexts.textContent='No active contexts';
 return;
 
 }
 
-box.innerHTML=
-entries.map(
-([sender,info])=>`
-
-<div style="
-margin-bottom:8px;
-padding:10px;
-background:#0d1117;
-border-radius:6px;
-border:1px solid #30363d
-">
-
-<b>${sender}</b>
-
-<span style="
-color:#25d366;
-margin-left:8px
-">
-${info.count} msgs
-</span>
-
-<span style="
-color:#8b949e;
-margin-left:8px;
-font-size:11px
-">
-IST day: ${info.ist_date}
-</span>
-
-<br>
-
-<span style="
-color:#8b949e;
-font-size:11px
-">
-last: ${info.last_seen}
-</span>
-
-</div>
-
-`
+contexts.innerHTML=entries.map(([sender,x])=>
+'<div style="padding:9px;margin-bottom:7px;background:#0d1117;border:1px solid #30363d;border-radius:7px">'+
+'<b>'+escapeHtml(sender)+'</b>'+
+' — '+x.count+' messages'+
+'<br><small style="color:#8b949e">'+
+'Last: '+escapeHtml(x.last_seen)+
+'</small></div>'
 ).join('');
 
-}
-
-
-function clearCtx(){
-
-fetch(
-'/contexts/clear',
-{method:'POST'}
-).then(loadCtx);
+}catch(e){}
 
 }
 
 
-function clearLogs(){
+async function clearContexts(){
 
-fetch(
-'/logs/clear',
-{method:'POST'}
-).then(loadLogs);
+await fetch('/contexts/clear',{method:'POST'});
+loadContexts();
 
 }
 
 
-function copyUrl(){
+function escapeHtml(x){
 
-const text=
-document.getElementById(
-'webhookUrl'
-).textContent;
-
-navigator.clipboard.writeText(text);
+return String(x)
+.replaceAll('&','&amp;')
+.replaceAll('<','&lt;')
+.replaceAll('>','&gt;')
+.replaceAll('"','&quot;')
+.replaceAll("'","&#039;");
 
 }
 
 
 loadConfig();
-
 loadLogs();
+loadContexts();
 
-loadCtx();
-
-setInterval(
-loadLogs,
-3000
-);
-
-setInterval(
-loadCtx,
-5000
-);
+setInterval(loadLogs,3000);
+setInterval(loadContexts,5000);
 
 </script>
 
@@ -1935,17 +1105,16 @@ loadCtx,
 """
 
 
-# ============================================================
+# =========================================================
 # HTTP HANDLER
-# ============================================================
+# =========================================================
 
 class Handler(BaseHTTPRequestHandler):
 
     logs = []
 
-    def log_message(self, *a):
+    def log_message(self, *args):
         pass
-
 
     def send_json(self, code, data):
 
@@ -2006,162 +1175,73 @@ class Handler(BaseHTTPRequestHandler):
             )
         )
 
-        return (
-            self.rfile.read(length)
-            if length > 0
-            else b""
-        )
+        return self.rfile.read(length) if length else b""
 
 
-    def add_log(
-        self,
-        t,
-        sender,
-        text
-    ):
-
-        icon = {
-            "sent": "✅",
-            "skip": "⏭️",
-            "err": "❌"
-        }.get(t, "•")
+    def add_log(self,t,sender,text):
 
         Handler.logs.append({
-
-            "type": t,
-
-            "sender": sender,
-
-            "text": str(text)[:200],
-
-            "time":
-                now_ist().strftime(
-                    "%H:%M:%S"
-                ),
-
-            "icon": icon
-
+            "type":t,
+            "sender":sender,
+            "text":str(text)[:300],
+            "time":now_ist().strftime("%H:%M:%S")
         })
 
-        Handler.logs = Handler.logs[-50:]
+        Handler.logs=Handler.logs[-100:]
 
 
-    # ========================================================
+    # -----------------------------------------------------
     # GET
-    # ========================================================
+    # -----------------------------------------------------
 
     def do_GET(self):
 
-        if self.path in (
-            "/",
-            "/dashboard"
-        ):
+        if self.path in ("/","/dashboard"):
 
-            self.send_html(
-                DASHBOARD_HTML
-            )
+            self.send_html(DASHBOARD_HTML)
 
-
-        elif self.path == "/config":
-
-            cfg=load_config()
-
-            # Do not expose full API key unnecessarily.
-            # UI can still work with env key.
-            safe=cfg.copy()
-
-            key=safe.get(
-                "groq_api_key",
-                ""
-            )
-
-            if key:
-
-                safe["groq_api_key"] = (
-                    key[:8] + "..." +
-                    key[-4:]
-                    if len(key)>12
-                    else "SET"
-                )
+        elif self.path=="/config":
 
             self.send_json(
                 200,
-                safe
+                load_config()
             )
 
-
-        elif self.path == "/logs":
+        elif self.path=="/logs":
 
             self.send_json(
                 200,
-                {
-                    "logs":
-                        Handler.logs
-                }
+                {"logs":Handler.logs}
             )
 
-
-        elif self.path == "/contexts":
+        elif self.path=="/contexts":
 
             cfg=load_config()
-
-            cleanup_expired_contexts(
-                cfg
-            )
+            cleanup_context(cfg)
 
             result={}
 
-            for sender,data in CONTEXT.items():
+            for sender,msgs in CONTEXT.items():
 
-                if not isinstance(
-                    data,
-                    dict
-                ):
+                if not msgs:
                     continue
 
-                messages=data.get(
-                    "messages",
-                    []
-                )
-
-                if not messages:
-                    continue
-
-                last_seen=data.get(
-                    "last_seen_ts"
-                )
+                last=msgs[-1]
 
                 result[sender]={
-
-                    "count":
-                        len(messages),
-
-                    "ist_date":
-                        data.get(
-                            "ist_date"
-                        ),
-
-                    "last_seen":
-                        timestamp_ist(
-                            last_seen
-                        )
-                        if last_seen
-                        else "unknown"
+                    "count":len(msgs),
+                    "last_seen":last.get(
+                        "ist_time",
+                        "unknown"
+                    )
                 }
 
             self.send_json(
                 200,
-                {
-                    "contexts":
-                        result,
-
-                    "current_ist":
-                        ist_now_string()
-                }
+                {"contexts":result}
             )
 
-
-        elif self.path == "/debug":
+        elif self.path=="/debug":
 
             cfg=load_config()
 
@@ -2173,391 +1253,253 @@ class Handler(BaseHTTPRequestHandler):
             key_preview=(
                 key[:8]+"..."+key[-4:]
                 if len(key)>12
-                else (
-                    "SET"
-                    if key
-                    else "MISSING"
-                )
+                else
+                ("SET" if key else "MISSING")
             )
 
             data,err,status=raw_groq_request(
                 cfg
             )
 
+            response={
+                "current_ist":ist_string(),
+                "key":key_preview,
+                "status":status
+            }
+
             if data:
-
-                self.send_json(
-                    200,
-                    {
-                        "current_ist":
-                            ist_now_string(),
-
-                        "key":
-                            key_preview,
-
-                        "status":
-                            status,
-
-                        "groq_raw":
-                            data
-                    }
-                )
-
+                response["groq_raw"]=data
             else:
+                response["groq_error"]=status
+                response["groq_body"]=err
 
-                self.send_json(
-                    200,
-                    {
-                        "current_ist":
-                            ist_now_string(),
-
-                        "key":
-                            key_preview,
-
-                        "groq_error":
-                            status,
-
-                        "groq_body":
-                            err
-                    }
-                )
-
-
-        elif self.path == "/health":
-
-            cleanup_expired_contexts(
-                load_config()
+            self.send_json(
+                200,
+                response
             )
+
+        elif self.path=="/health":
 
             self.send_json(
                 200,
                 {
                     "status":"ok",
-
-                    "server":
-                        "WA Groq Aria",
-
-                    "current_ist":
-                        ist_now_string(),
-
-                    "context_day":
-                        ist_date(),
-
-                    "active_contexts":
-                        len(CONTEXT)
+                    "current_ist":ist_string()
                 }
             )
-
 
         else:
 
             self.send_json(
                 404,
-                {
-                    "error":
-                        "not found"
-                }
+                {"error":"not found"}
             )
 
 
-    # ========================================================
+    # -----------------------------------------------------
     # POST
-    # ========================================================
+    # -----------------------------------------------------
 
     def do_POST(self):
 
-        # ----------------------------------------------------
+        # ---------------------------------------------
         # CONFIG
-        # ----------------------------------------------------
+        # ---------------------------------------------
 
-        if self.path == "/config":
+        if self.path=="/config":
 
             try:
 
-                incoming=json.loads(
+                cfg=json.loads(
                     self.read_body()
                 )
 
-                current=load_config()
+                old=load_config()
 
-                if not isinstance(
-                    incoming,
-                    dict
-                ):
-                    raise ValueError(
-                        "Config must be an object"
+                # Prevent accidental deletion of API key
+                if not cfg.get("groq_api_key"):
+                    cfg["groq_api_key"]=old.get(
+                        "groq_api_key",
+                        ""
                     )
 
-                for k,v in incoming.items():
-
-                    if k in DEFAULT_CONFIG:
-
-                        current[k]=v
-
-                # Do not save the masked API key
-                # received from the dashboard.
-                if (
-                    "groq_api_key"
-                    in incoming
-                ):
-
-                    submitted=(
-                        incoming.get(
-                            "groq_api_key"
-                        ) or ""
-                    ).strip()
-
-                    if (
-                        "..." in submitted
-                        and current.get(
-                            "groq_api_key"
-                        )
-                    ):
-                        pass
-
-                    elif submitted:
-                        current[
-                            "groq_api_key"
-                        ]=submitted
-
-                save_config(current)
+                save_config(cfg)
 
                 self.send_json(
                     200,
-                    {
-                        "status":
-                            "saved"
-                    }
+                    {"status":"saved"}
                 )
 
             except Exception as e:
 
                 self.send_json(
                     400,
-                    {
-                        "error":
-                            str(e)
-                    }
+                    {"error":str(e)}
                 )
 
+            return
 
-        # ----------------------------------------------------
+
+        # ---------------------------------------------
         # TEST
-        # ----------------------------------------------------
+        # ---------------------------------------------
 
-        elif self.path == "/test":
-
-            cfg=load_config()
-
-            sender="TestUser"
-
-            message=(
-                "Hello! Reply in a fun way "
-                "to test if you are working."
-            )
-
-            use_ctx=False
+        if self.path=="/test":
 
             try:
 
-                raw=self.read_body()
-
-                if raw:
-
-                    body=json.loads(
-                        raw
-                    )
-
-                    sender=(
-                        body.get(
-                            "sender"
-                        )
-                        or "TestUser"
-                    ).strip()
-
-                    message=(
-                        body.get(
-                            "message"
-                        )
-                        or message
-                    ).strip()
-
-                    use_ctx=bool(
-                        body.get(
-                            "use_context",
-                            False
-                        )
-                    )
-
-            except Exception as e:
-
-                self.send_json(
-                    200,
-                    {
-                        "error":
-                            f"Parse error: {e}"
-                    }
+                body=json.loads(
+                    self.read_body() or b"{}"
                 )
 
-                return
+                sender=(
+                    body.get("sender")
+                    or "TestUser"
+                ).strip()
 
+                message=(
+                    body.get("message")
+                    or ""
+                ).strip()
 
-            try:
-
-                saved_ctx=None
-
-                if (
-                    not use_ctx
-                    and sender in CONTEXT
-                ):
-
-                    saved_ctx=CONTEXT.pop(
-                        sender
-                    )
-
-                    save_context()
-
-
-                ctx_count=len(
-                    get_context(
-                        sender,
-                        cfg
+                use_context=bool(
+                    body.get(
+                        "use_context",
+                        True
                     )
                 )
+
+                if not message:
+
+                    self.send_json(
+                        400,
+                        {
+                            "error":
+                            "Message cannot be empty"
+                        }
+                    )
+
+                    return
+
+                cfg=load_config()
+
+                before=len(
+                    get_context(sender,cfg)
+                ) if use_context else 0
 
                 reply,err=ask_groq(
                     cfg,
                     sender,
-                    message
+                    message,
+                    use_context
                 )
-
-                # Restore test context
-                # if context was disabled.
-                if saved_ctx is not None:
-
-                    CONTEXT[
-                        sender
-                    ]=saved_ctx
-
-                    save_context()
-
 
                 if reply:
 
                     self.add_log(
                         "sent",
-                        f"[TEST] {sender}",
+                        "[TEST] "+sender,
                         reply
                     )
 
                     self.send_json(
                         200,
                         {
-                            "reply":
-                                reply,
-
-                            "ctx_msgs":
-                                ctx_count,
-
-                            "current_ist":
-                                ist_now_string()
+                            "reply":reply,
+                            "ctx_msgs":before,
+                            "current_ist":ist_string()
                         }
                     )
 
                 else:
 
+                    self.add_log(
+                        "error",
+                        "[TEST] "+sender,
+                        err or "No reply"
+                    )
+
                     self.send_json(
                         200,
                         {
-                            "error":
-                                err
-                                or
-                                "No reply"
+                            "reply":None,
+                            "error":err or "No reply",
+                            "http_status":200,
+                            "current_ist":ist_string()
                         }
                     )
 
             except Exception as e:
 
                 self.send_json(
-                    200,
+                    500,
                     {
+                        "reply":None,
                         "error":
-                            f"{type(e).__name__}: {e}"
+                        f"{type(e).__name__}: {e}",
+                        "current_ist":ist_string()
                     }
                 )
 
+            return
 
-        # ----------------------------------------------------
+
+        # ---------------------------------------------
         # CLEAR LOGS
-        # ----------------------------------------------------
+        # ---------------------------------------------
 
-        elif self.path == "/logs/clear":
+        if self.path=="/logs/clear":
 
             Handler.logs=[]
 
             self.send_json(
                 200,
-                {
-                    "status":
-                        "cleared"
-                }
+                {"status":"cleared"}
             )
 
+            return
 
-        # ----------------------------------------------------
+
+        # ---------------------------------------------
         # CLEAR CONTEXT
-        # ----------------------------------------------------
+        # ---------------------------------------------
 
-        elif self.path == "/contexts/clear":
+        if self.path=="/contexts/clear":
 
             CONTEXT.clear()
-
             save_context()
 
             self.send_json(
                 200,
-                {
-                    "status":
-                        "cleared"
-                }
+                {"status":"cleared"}
             )
 
+            return
 
-        # ----------------------------------------------------
-        # WHATSAPP WEBHOOK
-        # ----------------------------------------------------
 
-        elif self.path == "/webhook":
+        # ---------------------------------------------
+        # WEBHOOK
+        # ---------------------------------------------
+
+        if self.path=="/webhook":
 
             try:
 
-                raw=self.read_body()
-
                 body=json.loads(
-                    raw
+                    self.read_body()
                 )
 
             except Exception:
 
                 self.send_json(
                     400,
-                    {
-                        "error":
-                            "invalid json"
-                    }
+                    {"error":"invalid json"}
                 )
 
                 return
 
 
             cfg=load_config()
-
-
-            # Clean previous IST-day context
-            cleanup_expired_contexts(
-                cfg
-            )
-
 
             if not cfg.get(
                 "enabled",
@@ -2566,9 +1508,7 @@ class Handler(BaseHTTPRequestHandler):
 
                 self.send_json(
                     200,
-                    {
-                        "replies":[]
-                    }
+                    {"replies":[]}
                 )
 
                 return
@@ -2583,7 +1523,13 @@ class Handler(BaseHTTPRequestHandler):
                 query,
                 dict
             ):
-                query={}
+
+                self.send_json(
+                    400,
+                    {"error":"invalid query"}
+                )
+
+                return
 
 
             sender=(
@@ -2595,9 +1541,7 @@ class Handler(BaseHTTPRequestHandler):
                 "Unknown"
             )
 
-            sender=str(
-                sender
-            ).replace(
+            sender=str(sender).replace(
                 "[test]",
                 ""
             ).strip()
@@ -2610,10 +1554,6 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 or
                 ""
-            )
-
-            message=str(
-                message
             ).strip()
 
 
@@ -2627,32 +1567,23 @@ class Handler(BaseHTTPRequestHandler):
 
                 self.send_json(
                     200,
-                    {
-                        "replies":[]
-                    }
+                    {"replies":[]}
                 )
 
                 return
 
 
-            # Current interaction state
-            state=get_sender_state(
-                sender,
-                cfg
-            )
-
             print(
-                f"[WA] "
-                f"{ist_now_string()} | "
-                f"{sender}: "
-                f"{message[:120]}"
+                f"[WA] {ist_string()} | "
+                f"{sender}: {message[:100]}"
             )
 
 
             reply,err=ask_groq(
                 cfg,
                 sender,
-                message
+                message,
+                True
             )
 
 
@@ -2669,31 +1600,17 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "replies":[
                             {
-                                "message":
-                                    reply,
-
-                                "delay":
-                                    cfg.get(
-                                        "delay_min",
-                                        8
-                                    ),
-
-                                "delayMax":
-                                    cfg.get(
-                                        "delay_max",
-                                        12
-                                    )
+                                "message":reply,
+                                "delay":cfg.get(
+                                    "delay_min",
+                                    8
+                                ),
+                                "delayMax":cfg.get(
+                                    "delay_max",
+                                    12
+                                )
                             }
-                        ],
-
-                        "ist":
-                            ist_now_string(),
-
-                        "returning_after_gap":
-                            state.get(
-                                "returning_after_gap",
-                                False
-                            )
+                        ]
                     }
                 )
 
@@ -2712,10 +1629,14 @@ class Handler(BaseHTTPRequestHandler):
                     }
                 )
 
+            return
 
-    # ========================================================
-    # OPTIONS
-    # ========================================================
+
+        self.send_json(
+            404,
+            {"error":"not found"}
+        )
+
 
     def do_OPTIONS(self):
 
@@ -2739,18 +1660,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-# ============================================================
-# START SERVER
-# ============================================================
+# =========================================================
+# START
+# =========================================================
 
-if __name__ == "__main__":
+if __name__=="__main__":
 
     load_context()
 
     cfg=load_config()
 
-    # Immediately clean old IST-day contexts.
-    cleanup_expired_contexts(cfg)
+    cleanup_context(cfg)
 
     PORT=int(
         os.environ.get(
@@ -2760,39 +1680,20 @@ if __name__ == "__main__":
     )
 
     print(
-        "======================================"
+        f"WA Groq Server running on :{PORT}"
     )
 
     print(
-        "WA Groq Server — Aria"
+        f"IST: {ist_string()}"
     )
 
     print(
-        f"Port: {PORT}"
-    )
-
-    print(
-        f"Current IST: {ist_now_string()}"
-    )
-
-    print(
-        f"Context date: {ist_date()}"
-    )
-
-    print(
-        f"Active contexts: {len(CONTEXT)}"
-    )
-
-    print(
-        "Context policy: IST calendar day"
-    )
-
-    print(
-        "======================================"
+        f"Context retention: "
+        f"{cfg.get('context_days',3)} IST calendar days"
     )
 
     HTTPServer(
-        ("0.0.0.0", PORT),
+        ("0.0.0.0",PORT),
         Handler
     ).serve_forever()
 
