@@ -79,6 +79,8 @@ def ask_groq(cfg, sender, message):
     try:
         with urllib.request.urlopen(req, timeout=25) as r:
             data = json.loads(r.read())
+            if "choices" not in data:
+                return None, f"Groq bad response: {json.dumps(data)[:300]}"
             reply = data["choices"][0]["message"]["content"].strip()
             if reply.upper().startswith("SKIP"):
                 return None, "Groq decided to skip"
@@ -90,6 +92,35 @@ def ask_groq(cfg, sender, message):
         return None, f"Groq HTTP {e.code}: {err[:300]}"
     except Exception as e:
         return None, f"{type(e).__name__}: {str(e)}"
+
+def raw_groq_request(cfg, prompt="say hi", max_tokens=20):
+    """Used by /debug — returns (parsed_json_or_None, error_str_or_None, status_code)"""
+    api_key = cfg.get("groq_api_key", "")
+    if not api_key:
+        return None, "GROQ_API_KEY is empty", None
+    body = json.dumps({
+        "model": cfg.get("groq_model", "openai/gpt-oss-120b"),
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}]
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json"
+        },
+        method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return json.loads(r.read()), None, r.status
+    except urllib.error.HTTPError as e:
+        return None, e.read().decode(), e.code
+    except Exception as e:
+        return None, f"{type(e).__name__}: {str(e)}", None
 
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -126,6 +157,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .btn{padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:opacity .2s}
   .btn-green{background:#25d366;color:#fff}
   .btn-outline{background:transparent;border:1px solid #30363d;color:#8b949e}
+  .btn-red{background:transparent;border:1px solid #ef4444;color:#ef4444}
   .btn:hover{opacity:.85}
   .btn:disabled{opacity:.4;cursor:default}
   .actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
@@ -147,9 +179,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .modal input,.modal textarea{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit;outline:none;transition:border .2s}
   .modal input:focus,.modal textarea:focus{border-color:#25d366}
   .modal textarea{resize:vertical;min-height:100px;line-height:1.6}
-  .result-box{padding:12px;border-radius:8px;font-size:13px;line-height:1.6;display:none}
+  .result-box{padding:12px;border-radius:8px;font-size:13px;line-height:1.6;display:none;word-break:break-all}
   .result-box.ok{background:#052a1a;border:1px solid #25d366;color:#25d366}
-  .result-box.err{background:#2a0505;border:1px solid #ef4444;color:#ef4444;word-break:break-all}
+  .result-box.err{background:#2a0505;border:1px solid #ef4444;color:#ef4444}
+  .debug-box{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;display:none}
 </style>
 </head>
 <body>
@@ -213,6 +246,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <button class="btn btn-outline" onclick="openTestModal()">Test Groq</button>
       <button class="btn btn-outline" onclick="clearCtx()">Clear All Contexts</button>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>🔍 Debug</h2>
+    <p style="font-size:13px;color:#8b949e;margin-bottom:12px">Fires a raw request to Groq and shows the exact response — use this to diagnose API key or model issues.</p>
+    <button class="btn btn-red" onclick="runDebug()" id="debugBtn">Run Debug Request</button>
+    <div id="debugBox" class="debug-box" style="margin-top:12px"></div>
   </div>
 
   <div class="card">
@@ -288,6 +328,25 @@ async function saveSettings() {
   setTimeout(() => t.style.display = 'none', 2000);
 }
 
+async function runDebug() {
+  const btn = document.getElementById('debugBtn');
+  const box = document.getElementById('debugBox');
+  btn.disabled = true; btn.textContent = 'Running…';
+  box.style.display = 'block';
+  box.style.color = '#8b949e';
+  box.textContent = 'Sending request to Groq…';
+  try {
+    const r = await fetch('/debug');
+    const d = await r.json();
+    box.style.color = d.groq_error || d.exception ? '#ef4444' : '#25d366';
+    box.textContent = JSON.stringify(d, null, 2);
+  } catch(e) {
+    box.style.color = '#ef4444';
+    box.textContent = 'Fetch failed: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'Run Debug Request';
+}
+
 function openTestModal() {
   document.getElementById('testModal').classList.add('open');
   document.getElementById('testModalResult').style.display = 'none';
@@ -309,16 +368,12 @@ async function runCustomTest() {
   const el      = document.getElementById('testModalResult');
 
   if (!message) {
-    el.className = 'result-box err';
-    el.style.display = 'block';
-    el.textContent = '❌ Type a message first';
-    return;
+    el.className = 'result-box err'; el.style.display = 'block';
+    el.textContent = '❌ Type a message first'; return;
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
+  btn.disabled = true; btn.textContent = 'Sending…';
   el.style.display = 'none';
-
   try {
     const r = await fetch('/test', {
       method: 'POST',
@@ -330,21 +385,16 @@ async function runCustomTest() {
     if (d.reply) {
       el.className = 'result-box ok';
       el.innerHTML = '<b style="color:#8b949e">Aria →</b> ' + d.reply +
-        (d.ctx_msgs !== undefined
-          ? ' <span style="color:#8b949e;font-size:11px">(ctx: ' + d.ctx_msgs + ' msgs)</span>'
-          : '');
+        (d.ctx_msgs !== undefined ? ' <span style="color:#8b949e;font-size:11px">(ctx: '+d.ctx_msgs+' msgs)</span>' : '');
     } else {
       el.className = 'result-box err';
       el.textContent = '❌ ' + (d.error || 'Unknown error');
     }
   } catch(e) {
-    el.style.display = 'block';
-    el.className = 'result-box err';
+    el.style.display = 'block'; el.className = 'result-box err';
     el.textContent = '❌ Fetch failed: ' + e.message;
   }
-
-  btn.disabled = false;
-  btn.textContent = 'Send';
+  btn.disabled = false; btn.textContent = 'Send';
 }
 
 async function loadLogs() {
@@ -352,8 +402,7 @@ async function loadLogs() {
   const d = await r.json();
   const box = document.getElementById('logBox');
   if (!d.logs || !d.logs.length) {
-    box.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">No activity yet</div>';
-    return;
+    box.innerHTML = '<div style="color:#8b949e;text-align:center;padding:20px">No activity yet</div>'; return;
   }
   box.innerHTML = d.logs.slice().reverse().map(l => {
     const cls  = l.type==='sent'?'log-sent':l.type==='skip'?'log-skip':'log-err';
@@ -367,16 +416,12 @@ async function loadCtx() {
   const d = await r.json();
   const box = document.getElementById('ctxBox');
   const entries = Object.entries(d.contexts || {});
-  if (!entries.length) {
-    box.innerHTML = '<span style="color:#8b949e">No active contexts</span>';
-    return;
-  }
+  if (!entries.length) { box.innerHTML = '<span style="color:#8b949e">No active contexts</span>'; return; }
   box.innerHTML = entries.map(([sender, info]) =>
     '<div style="margin-bottom:8px;padding:8px;background:#0d1117;border-radius:6px;border:1px solid #30363d">' +
     '<b style="color:#e6edf3">'+sender+'</b>' +
     '<span style="color:#25d366;margin-left:8px">'+info.count+' msg'+(info.count!==1?'s':'')+'</span>' +
-    '<span style="color:#8b949e;margin-left:8px;font-size:11px">last: '+info.last_seen+'</span>' +
-    '</div>'
+    '<span style="color:#8b949e;margin-left:8px;font-size:11px">last: '+info.last_seen+'</span></div>'
   ).join('');
 }
 
@@ -384,8 +429,8 @@ function clearCtx()  { fetch('/contexts/clear',{method:'POST'}).then(loadCtx); }
 function clearLogs() { fetch('/logs/clear',{method:'POST'}).then(loadLogs); }
 function copyUrl() {
   navigator.clipboard.writeText(document.getElementById('webhookUrl').textContent);
-  event.target.textContent = 'Copied!';
-  setTimeout(() => event.target.textContent = 'Copy', 1500);
+  event.target.textContent='Copied!';
+  setTimeout(()=>event.target.textContent='Copy',1500);
 }
 
 loadConfig(); loadLogs(); loadCtx();
@@ -447,6 +492,15 @@ class Handler(BaseHTTPRequestHandler):
                         "last_seen": datetime.fromtimestamp(active[-1]["ts"]).strftime("%H:%M:%S")
                     }
             self.send_json(200, {"contexts": result})
+        elif self.path == "/debug":
+            cfg = load_config()
+            key = cfg.get("groq_api_key", "")
+            key_preview = (key[:8] + "..." + key[-4:]) if len(key) > 12 else ("SET(short?)" if key else "MISSING")
+            data, err, status = raw_groq_request(cfg)
+            if data:
+                self.send_json(200, {"key": key_preview, "status": status, "groq_raw": data})
+            else:
+                self.send_json(200, {"key": key_preview, "groq_error": status, "groq_body": err})
         elif self.path == "/health":
             self.send_json(200, {"status": "ok"})
         else:
