@@ -9,7 +9,7 @@ CONFIG_FILE = "wa_config.json"
 
 DEFAULT_CONFIG = {
     "groq_api_key": "",
-    "groq_model": "llama3-8b-8192",
+    "groq_model": "llama-3.1-8b-instant",
     "system_prompt": (
         "You are an AI auto-responder for WhatsApp. Reply politely and briefly "
         "on behalf of the user who is currently busy. Keep replies under 2 sentences. "
@@ -39,7 +39,7 @@ def ask_groq(cfg, sender, message):
         return None, "No API key set"
 
     body = json.dumps({
-        "model": cfg.get("groq_model", "llama3-8b-8192"),
+        "model": cfg.get("groq_model", "llama-3.1-8b-instant"),
         "max_tokens": 150,
         "temperature": 0.7,
         "messages": [
@@ -148,7 +148,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <input type="password" id="apiKey" placeholder="gsk_..." />
     <label>Model</label>
     <select id="model">
-      <option value="llama3-8b-8192">llama3-8b-8192 — fast</option>
+      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant — fast</option>
       <option value="llama3-70b-8192">llama3-70b-8192 — smarter</option>
       <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
       <option value="gemma2-9b-it">gemma2-9b-it</option>
@@ -191,7 +191,7 @@ async function loadConfig() {
   const r = await fetch('/config');
   const c = await r.json();
   document.getElementById('apiKey').value = c.groq_api_key || '';
-  document.getElementById('model').value = c.groq_model || 'llama3-8b-8192';
+  document.getElementById('model').value = c.groq_model || 'llama-3.1-8b-instant';
   document.getElementById('prompt').value = c.system_prompt || '';
   document.getElementById('delayMin').value = c.delay_min ?? 8;
   document.getElementById('delayMax').value = c.delay_max ?? 12;
