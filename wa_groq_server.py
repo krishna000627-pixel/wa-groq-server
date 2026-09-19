@@ -149,9 +149,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <label>Model</label>
     <select id="model">
       <option value="llama-3.1-8b-instant">llama-3.1-8b-instant — fast</option>
-      <option value="llama3-70b-8192">llama3-70b-8192 — smarter</option>
-      <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-      <option value="gemma2-9b-it">gemma2-9b-it</option>
+      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b — smarter</option>
+      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
+      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
     </select>
     <label>System Prompt</label>
     <textarea id="prompt"></textarea>
