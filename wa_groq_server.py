@@ -1,7 +1,3 @@
-"""
-WA Groq Webhook Server
-"""
-
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.error
 
@@ -9,25 +5,25 @@ CONFIG_FILE = "wa_config.json"
 
 DEFAULT_CONFIG = {
     "groq_api_key": "",
-    "groq_model": "llama-3.1-8b-instant",
-    "system_prompt": (
-        "You are an AI auto-responder for WhatsApp. Reply politely and briefly "
-        "on behalf of the user who is currently busy. Keep replies under 2 sentences. "
-        "If the message is spam, a forward, or needs a personal decision, reply only with: SKIP"
-    ),
+    "groq_model": "openai/gpt-oss-120b",
+    "system_prompt": "You are Aria, Krishna's personal AI assistant managing his WhatsApp.\n\nIMPORTANT: Every message you receive is INDEPENDENT. Treat each message fresh.\n\nKrishna's schedule (IST):\n- 7-9 AM: Morning routine\n- 11 AM-4:40 PM: School\n- 5-7 PM: Coaching\n- 11 PM-7 AM: Sleeping\n\nRules:\n1. Treat every message as new.\n2. Introduce yourself as Aria, Krishna's AI assistant — naturally, not every time.\n3. Reply based on Krishna's schedule.\n4. Hinglish = Hinglish, English = English.\n5. Banter gets banter. Match the energy.\n6. Max 1-2 lines. Punchy.\n7. SKIP only for: forwards, spam, blank, media with no text.\n8. For EVERYTHING else — always reply.\n9. Never sound robotic or formal.",
     "delay_min": 8,
     "delay_max": 12,
     "enabled": True
 }
 
 def load_config():
+    cfg = DEFAULT_CONFIG.copy()
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE) as f:
-            c = json.load(f)
-            for k, v in DEFAULT_CONFIG.items():
-                c.setdefault(k, v)
-            return c
-    return DEFAULT_CONFIG.copy()
+            saved = json.load(f)
+            for k, v in saved.items():
+                cfg[k] = v
+    # Always prefer env var for API key
+    env_key = os.environ.get("GROQ_API_KEY", "")
+    if env_key:
+        cfg["groq_api_key"] = env_key
+    return cfg
 
 def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
@@ -39,12 +35,12 @@ def ask_groq(cfg, sender, message):
         return None, "No API key set"
 
     body = json.dumps({
-        "model": cfg.get("groq_model", "llama-3.1-8b-instant"),
+        "model": cfg.get("groq_model", "openai/gpt-oss-120b"),
         "max_tokens": 150,
         "temperature": 0.7,
         "messages": [
             {"role": "system", "content": cfg.get("system_prompt", "")},
-            {"role": "user", "content": f"Message from {sender}: {message}"}
+            {"role": "user",   "content": f"Message from {sender}: {message}"}
         ]
     }).encode()
 
@@ -93,7 +89,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   label:first-of-type{margin-top:0}
   input,select,textarea{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit;outline:none;transition:border .2s}
   input:focus,select:focus,textarea:focus{border-color:#25d366}
-  textarea{resize:vertical;min-height:120px;line-height:1.6}
+  textarea{resize:vertical;min-height:140px;line-height:1.6}
   input[type=number]{width:100px}
   .row{display:flex;gap:12px;align-items:flex-end}
   .row .field{flex:1}
@@ -110,10 +106,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .btn:hover{opacity:.85}
   .btn:disabled{opacity:.4;cursor:default}
   .actions{display:flex;gap:10px;margin-top:16px}
-  .webhook-url{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-family:monospace;font-size:13px;color:#25d366;word-break:break-all}
+  .webhook-url{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-family:monospace;font-size:13px;color:#25d366;word-break:break-all;flex:1}
   .copy-btn{padding:6px 14px;font-size:12px;border-radius:6px;background:#21262d;border:1px solid #30363d;color:#e6edf3;cursor:pointer;white-space:nowrap}
   .copy-btn:hover{background:#30363d}
-  .log-box{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;height:200px;overflow-y:auto;line-height:1.8}
+  .log-box{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;height:220px;overflow-y:auto;line-height:1.8}
   .log-entry{padding:2px 0;border-bottom:1px solid #21262d}
   .log-entry:last-child{border:none}
   .log-sent{color:#25d366}
@@ -124,19 +120,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .test-result.ok{background:#052a1a;border:1px solid #25d366;color:#25d366}
   .test-result.err{background:#2a0505;border:1px solid #ef4444;color:#ef4444}
   .saved-toast{display:none;color:#25d366;font-size:13px;margin-left:auto;align-self:center}
+  .env-note{font-size:11px;color:#f59e0b;margin-top:4px}
   select option{background:#161b22}
 </style>
 </head>
 <body>
 <header>
   <div class="logo">⚡</div>
-  <h1>WA Groq Server</h1>
+  <h1>WA Groq — Aria</h1>
   <span class="status-dot"></span>
 </header>
 <div class="container">
   <div class="card">
     <h2>📡 Webhook URL</h2>
-    <p style="font-size:13px;color:#8b949e;margin-bottom:12px">Paste this in AutoResponder app → Rule → Connect web server</p>
     <div style="display:flex;gap:8px;align-items:center">
       <div class="webhook-url" id="webhookUrl">Loading...</div>
       <button class="copy-btn" onclick="copyUrl()">Copy</button>
@@ -145,13 +141,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <div class="card">
     <h2>⚙️ Settings</h2>
     <label>Groq API Key</label>
-    <input type="password" id="apiKey" placeholder="gsk_..." />
+    <input type="password" id="apiKey" placeholder="gsk_... (or set GROQ_API_KEY env var on Render)" />
+    <p class="env-note">💡 Set GROQ_API_KEY in Render environment to persist across restarts</p>
     <label>Model</label>
     <select id="model">
-      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant — fast</option>
-      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b — smarter</option>
-      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
-      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
+      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b — smartest (14400 RPD)</option>
+      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b — faster (14400 RPD)</option>
+      <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b — alternative</option>
     </select>
     <label>System Prompt</label>
     <textarea id="prompt"></textarea>
@@ -190,22 +186,22 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 async function loadConfig() {
   const r = await fetch('/config');
   const c = await r.json();
-  document.getElementById('apiKey').value = c.groq_api_key || '';
-  document.getElementById('model').value = c.groq_model || 'llama-3.1-8b-instant';
-  document.getElementById('prompt').value = c.system_prompt || '';
-  document.getElementById('delayMin').value = c.delay_min ?? 8;
-  document.getElementById('delayMax').value = c.delay_max ?? 12;
+  document.getElementById('apiKey').value    = c.groq_api_key || '';
+  document.getElementById('model').value     = c.groq_model || 'openai/gpt-oss-120b';
+  document.getElementById('prompt').value    = c.system_prompt || '';
+  document.getElementById('delayMin').value  = c.delay_min ?? 8;
+  document.getElementById('delayMax').value  = c.delay_max ?? 12;
   document.getElementById('enabled').checked = c.enabled !== false;
   document.getElementById('webhookUrl').textContent = window.location.origin + '/webhook';
 }
 async function saveSettings() {
   const cfg = {
-    groq_api_key: document.getElementById('apiKey').value.trim(),
-    groq_model: document.getElementById('model').value,
+    groq_api_key:  document.getElementById('apiKey').value.trim(),
+    groq_model:    document.getElementById('model').value,
     system_prompt: document.getElementById('prompt').value,
-    delay_min: parseInt(document.getElementById('delayMin').value) || 8,
-    delay_max: parseInt(document.getElementById('delayMax').value) || 12,
-    enabled: document.getElementById('enabled').checked
+    delay_min:     parseInt(document.getElementById('delayMin').value) || 8,
+    delay_max:     parseInt(document.getElementById('delayMax').value) || 12,
+    enabled:       document.getElementById('enabled').checked
   };
   await fetch('/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg)});
   const t = document.getElementById('savedToast');
@@ -244,7 +240,7 @@ async function loadLogs() {
     return;
   }
   box.innerHTML = d.logs.slice().reverse().map(l => {
-    const cls = l.type==='sent'?'log-sent':l.type==='skip'?'log-skip':'log-err';
+    const cls  = l.type==='sent'?'log-sent':l.type==='skip'?'log-skip':'log-err';
     const icon = l.type==='sent'?'✅':l.type==='skip'?'⏭':'❌';
     return `<div class="log-entry ${cls}"><span class="log-time">${l.time}</span>${icon} <b>${l.sender}</b>: ${l.text}</div>`;
   }).join('');
@@ -255,125 +251,106 @@ function copyUrl() {
   event.target.textContent='Copied!';
   setTimeout(()=>event.target.textContent='Copy',1500);
 }
-loadConfig();
-loadLogs();
-setInterval(loadLogs, 3000);
+loadConfig(); loadLogs(); setInterval(loadLogs, 3000);
 </script>
 </body>
 </html>"""
 
 class Handler(BaseHTTPRequestHandler):
     logs = []
-
-    def log_message(self, fmt, *args): pass
+    def log_message(self, *a): pass
 
     def send_json(self, code, data):
         body = json.dumps(data).encode()
         self.send_response(code)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type","application/json")
         self.send_header("Content-Length", len(body))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin","*")
         self.end_headers()
         self.wfile.write(body)
 
     def send_html(self, html):
         body = html.encode()
         self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type","text/html; charset=utf-8")
         self.send_header("Content-Length", len(body))
         self.end_headers()
         self.wfile.write(body)
 
     def read_body(self):
-        length = int(self.headers.get("Content-Length", 0))
-        return self.rfile.read(length)
+        return self.rfile.read(int(self.headers.get("Content-Length",0)))
 
-    def add_log(self, log_type, sender, text):
+    def add_log(self, t, sender, text):
         from datetime import datetime
-        Handler.logs.append({
-            "type": log_type,
-            "sender": sender,
-            "text": text[:120],
-            "time": datetime.now().strftime("%H:%M:%S")
-        })
+        Handler.logs.append({"type":t,"sender":sender,"text":text[:120],"time":datetime.now().strftime("%H:%M:%S")})
         Handler.logs = Handler.logs[-50:]
 
     def do_GET(self):
-        if self.path in ("/", "/dashboard"):
-            self.send_html(DASHBOARD_HTML)
-        elif self.path == "/config":
-            self.send_json(200, load_config())
-        elif self.path == "/logs":
-            self.send_json(200, {"logs": Handler.logs})
-        elif self.path == "/health":
-            self.send_json(200, {"status": "ok"})
-        else:
-            self.send_json(404, {"error": "not found"})
+        if self.path in ("/","/dashboard"): self.send_html(DASHBOARD_HTML)
+        elif self.path == "/config":        self.send_json(200, load_config())
+        elif self.path == "/logs":          self.send_json(200, {"logs": Handler.logs})
+        elif self.path == "/health":        self.send_json(200, {"status":"ok"})
+        else:                               self.send_json(404, {"error":"not found"})
 
     def do_POST(self):
         if self.path == "/config":
             try:
                 cfg = json.loads(self.read_body())
                 save_config(cfg)
-                self.send_json(200, {"status": "saved"})
+                self.send_json(200, {"status":"saved"})
             except Exception as e:
                 self.send_json(400, {"error": str(e)})
 
         elif self.path == "/test":
             cfg = load_config()
-            reply, err = ask_groq(cfg, "TestUser", "Hello! This is a test message.")
-            if reply:
-                self.add_log("sent", "TestUser", reply)
-                self.send_json(200, {"reply": reply})
-            else:
-                self.send_json(200, {"error": err})
+            reply, err = ask_groq(cfg, "TestUser", "Hello! Reply in a fun way to test if you are working.")
+            if reply: self.add_log("sent","TestUser",reply); self.send_json(200,{"reply":reply})
+            else:      self.send_json(200,{"error":err})
 
         elif self.path == "/logs/clear":
             Handler.logs = []
-            self.send_json(200, {"status": "cleared"})
+            self.send_json(200,{"status":"cleared"})
 
         elif self.path == "/webhook":
             try:
-                body = json.loads(self.read_body())
+                raw  = self.read_body()
+                body = json.loads(raw)
             except Exception:
-                self.send_json(400, {"error": "invalid json"})
-                return
+                self.send_json(400,{"error":"invalid json"}); return
 
             cfg = load_config()
             if not cfg.get("enabled", True):
-                self.send_json(200, {"replies": []})
-                return
+                self.send_json(200,{"replies":[]}); return
 
-            query = body.get("query", {})
-            sender = query.get("sender", "Unknown")
-            message = query.get("message", "")
+            query   = body.get("query", body)
+            sender  = query.get("sender","") or "Unknown"
+            message = query.get("message","") or ""
 
-            print(f"[WA] {sender}: {message[:80]}")
+            # Strip [test] tag from sender
+            sender = sender.replace("[test]","").strip()
+
+            if not message.strip():
+                self.add_log("skip", sender, "skipped — empty message")
+                self.send_json(200,{"replies":[]}); return
+
+            print(f"[WA] {sender}: {message[:100]}")
             reply, err = ask_groq(cfg, sender, message)
 
             if reply:
                 self.add_log("sent", sender, f'-> "{reply}"')
-                self.send_json(200, {
-                    "replies": [{
-                        "message": reply,
-                        "delay": cfg.get("delay_min", 8),
-                        "delayMax": cfg.get("delay_max", 12)
-                    }]
-                })
+                self.send_json(200,{"replies":[{"message":reply,"delay":cfg.get("delay_min",8),"delayMax":cfg.get("delay_max",12)}]})
             else:
                 self.add_log("skip", sender, f'skipped — {err}')
-                self.send_json(200, {"replies": []})
+                self.send_json(200,{"replies":[]})
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Origin","*")
+        self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers","Content-Type")
         self.end_headers()
 
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 8080))
-    print(f"WA Groq Server on port {PORT}")
-    print(f"Dashboard -> http://localhost:{PORT}")
-    server = HTTPServer(("0.0.0.0", PORT), Handler)
-    server.serve_forever()
+    print(f"WA Groq Server on :{PORT}")
+    HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
