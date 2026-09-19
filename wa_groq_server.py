@@ -47,6 +47,21 @@ def add_to_context(sender, role, content):
         CONTEXT[sender] = []
     CONTEXT[sender].append({"role": role, "content": content, "ts": time.time()})
 
+def extract_reply(choice):
+    """Handle both normal and reasoning models — content first, reasoning as fallback."""
+    msg = choice.get("message", {})
+    content = (msg.get("content") or "").strip()
+    if content:
+        return content
+    # Reasoning model: reply is buried in reasoning field
+    reasoning = (msg.get("reasoning") or "").strip()
+    if reasoning:
+        # reasoning field contains the thought process + final reply
+        # grab the last non-empty line as the actual reply
+        lines = [l.strip() for l in reasoning.split("\n") if l.strip()]
+        return lines[-1] if lines else ""
+    return ""
+
 def ask_groq(cfg, sender, message):
     api_key = cfg.get("groq_api_key", "")
     if not api_key:
@@ -60,7 +75,7 @@ def ask_groq(cfg, sender, message):
 
     body = json.dumps({
         "model": cfg.get("groq_model", "openai/gpt-oss-120b"),
-        "max_tokens": 150,
+        "max_tokens": 500,
         "temperature": 0.7,
         "messages": messages
     }).encode()
@@ -79,9 +94,11 @@ def ask_groq(cfg, sender, message):
     try:
         with urllib.request.urlopen(req, timeout=25) as r:
             data = json.loads(r.read())
-            if "choices" not in data:
+            if "choices" not in data or not data["choices"]:
                 return None, f"Groq bad response: {json.dumps(data)[:300]}"
-            reply = data["choices"][0]["message"]["content"].strip()
+            reply = extract_reply(data["choices"][0])
+            if not reply:
+                return None, f"Empty reply — finish_reason: {data['choices'][0].get('finish_reason')} | raw: {json.dumps(data['choices'][0])[:200]}"
             if reply.upper().startswith("SKIP"):
                 return None, "Groq decided to skip"
             add_to_context(sender, "user",      f"Message from {sender}: {message}")
@@ -93,8 +110,7 @@ def ask_groq(cfg, sender, message):
     except Exception as e:
         return None, f"{type(e).__name__}: {str(e)}"
 
-def raw_groq_request(cfg, prompt="say hi", max_tokens=20):
-    """Used by /debug — returns (parsed_json_or_None, error_str_or_None, status_code)"""
+def raw_groq_request(cfg, prompt="say hi", max_tokens=100):
     api_key = cfg.get("groq_api_key", "")
     if not api_key:
         return None, "GROQ_API_KEY is empty", None
@@ -182,7 +198,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .result-box{padding:12px;border-radius:8px;font-size:13px;line-height:1.6;display:none;word-break:break-all}
   .result-box.ok{background:#052a1a;border:1px solid #25d366;color:#25d366}
   .result-box.err{background:#2a0505;border:1px solid #ef4444;color:#ef4444}
-  .debug-box{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;display:none}
+  .debug-box{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;line-height:1.7;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;display:none;margin-top:12px}
 </style>
 </head>
 <body>
@@ -208,10 +224,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <p class="env-note">💡 Set GROQ_API_KEY in Render environment to persist across restarts</p>
     <label>Model</label>
     <select id="model">
-      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b — smartest</option>
-      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b — faster</option>
+      <option value="openai/gpt-oss-120b">openai/gpt-oss-120b — smartest (reasoning)</option>
+      <option value="openai/gpt-oss-20b">openai/gpt-oss-20b — faster (reasoning)</option>
       <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b — alternative</option>
+      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile — standard</option>
+      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant — fastest</option>
     </select>
+    <p class="env-note">💡 openai/gpt-oss models are reasoning models — reply extracted from reasoning field automatically</p>
     <label>System Prompt</label>
     <textarea id="prompt"></textarea>
     <label>Reply Delay</label>
@@ -250,9 +269,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
   <div class="card">
     <h2>🔍 Debug</h2>
-    <p style="font-size:13px;color:#8b949e;margin-bottom:12px">Fires a raw request to Groq and shows the exact response — use this to diagnose API key or model issues.</p>
+    <p style="font-size:13px;color:#8b949e;margin-bottom:12px">Fires a raw request to Groq and shows the exact response.</p>
     <button class="btn btn-red" onclick="runDebug()" id="debugBtn">Run Debug Request</button>
-    <div id="debugBox" class="debug-box" style="margin-top:12px"></div>
+    <div id="debugBox" class="debug-box"></div>
   </div>
 
   <div class="card">
