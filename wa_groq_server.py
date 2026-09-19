@@ -50,7 +50,7 @@ def add_to_context(sender, role, content):
 def ask_groq(cfg, sender, message):
     api_key = cfg.get("groq_api_key", "")
     if not api_key:
-        return None, "No API key set"
+        return None, "No API key set — add GROQ_API_KEY in Render environment"
 
     history = get_context(sender, cfg)
     messages = [{"role": "system", "content": cfg.get("system_prompt", "")}]
@@ -87,9 +87,9 @@ def ask_groq(cfg, sender, message):
             return reply, None
     except urllib.error.HTTPError as e:
         err = e.read().decode()
-        return None, f"Groq HTTP {e.code}: {err[:200]}"
+        return None, f"Groq HTTP {e.code}: {err[:300]}"
     except Exception as e:
-        return None, str(e)
+        return None, f"{type(e).__name__}: {str(e)}"
 
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -137,19 +137,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .log-entry:last-child{border:none}
   .log-sent{color:#25d366}.log-skip{color:#f59e0b}.log-err{color:#ef4444}
   .log-time{color:#8b949e;margin-right:8px}
-  .test-result{margin-top:12px;padding:12px;border-radius:8px;font-size:13px;display:none}
-  .test-result.ok{background:#052a1a;border:1px solid #25d366;color:#25d366}
-  .test-result.err{background:#2a0505;border:1px solid #ef4444;color:#ef4444}
   .saved-toast{display:none;color:#25d366;font-size:13px;margin-left:auto;align-self:center}
   .env-note{font-size:11px;color:#f59e0b;margin-top:4px}
   .ctx-badge{display:inline-block;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:2px 8px;font-size:11px;color:#8b949e;margin-left:6px}
   select option{background:#161b22}
-  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;align-items:center;justify-content:center}
   .modal-overlay.open{display:flex}
-  .modal{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:24px;width:90%;max-width:480px;display:flex;flex-direction:column;gap:14px}
-  .modal input,.modal textarea{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit;outline:none}
+  .modal{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:24px;width:92%;max-width:480px;display:flex;flex-direction:column;gap:14px}
+  .modal input,.modal textarea{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit;outline:none;transition:border .2s}
   .modal input:focus,.modal textarea:focus{border-color:#25d366}
-  .modal textarea{resize:vertical;min-height:90px;line-height:1.6}
+  .modal textarea{resize:vertical;min-height:100px;line-height:1.6}
+  .result-box{padding:12px;border-radius:8px;font-size:13px;line-height:1.6;display:none}
+  .result-box.ok{background:#052a1a;border:1px solid #25d366;color:#25d366}
+  .result-box.err{background:#2a0505;border:1px solid #ef4444;color:#ef4444;word-break:break-all}
 </style>
 </head>
 <body>
@@ -173,17 +173,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <label>Groq API Key</label>
     <input type="password" id="apiKey" placeholder="gsk_... (or set GROQ_API_KEY env var on Render)" />
     <p class="env-note">💡 Set GROQ_API_KEY in Render environment to persist across restarts</p>
-
     <label>Model</label>
     <select id="model">
       <option value="openai/gpt-oss-120b">openai/gpt-oss-120b — smartest</option>
       <option value="openai/gpt-oss-20b">openai/gpt-oss-20b — faster</option>
       <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b — alternative</option>
     </select>
-
     <label>System Prompt</label>
     <textarea id="prompt"></textarea>
-
     <label>Reply Delay</label>
     <div class="row">
       <div class="field"><input type="number" id="delayMin" placeholder="min" min="0" max="60" /></div>
@@ -191,7 +188,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="field"><input type="number" id="delayMax" placeholder="max" min="0" max="60" /></div>
       <div style="color:#8b949e;padding-bottom:10px">seconds</div>
     </div>
-
     <label style="margin-top:16px">Context Window <span class="ctx-badge">per person, separate</span></label>
     <div class="row">
       <div class="field">
@@ -204,7 +200,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
     </div>
     <p class="env-note">💡 Each person gets their own rolling context. Messages older than the time window are auto-dropped.</p>
-
     <div class="toggle-row" style="margin-top:16px">
       <label class="toggle">
         <input type="checkbox" id="enabled" checked />
@@ -241,8 +236,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <div class="modal-overlay" id="testModal">
   <div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <h2 style="font-size:15px;font-weight:700;color:#e6edf3;text-transform:none;letter-spacing:0">🧪 Test Groq</h2>
-      <button onclick="closeTestModal()" style="background:none;border:none;color:#8b949e;font-size:20px;cursor:pointer;line-height:1">✕</button>
+      <span style="font-size:15px;font-weight:700;color:#e6edf3">🧪 Test Groq</span>
+      <button onclick="closeTestModal()" style="background:none;border:none;color:#8b949e;font-size:22px;cursor:pointer;line-height:1">✕</button>
     </div>
     <div>
       <label style="font-size:13px;color:#8b949e;display:block;margin-bottom:4px">Sender name</label>
@@ -253,11 +248,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <textarea id="testMsg" placeholder="Type anything you want to test…"></textarea>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <input type="checkbox" id="testUseCtx" checked style="width:auto;accent-color:#25d366" />
+      <input type="checkbox" id="testUseCtx" style="width:auto;accent-color:#25d366" />
       <label for="testUseCtx" style="font-size:13px;color:#8b949e;margin:0;display:inline">Include existing context for this sender</label>
     </div>
-    <button id="testRunBtn" class="btn btn-green" onclick="runCustomTest()" style="align-self:flex-end;padding:10px 24px">Send</button>
-    <div id="testModalResult" style="display:none;padding:12px;border-radius:8px;font-size:13px;line-height:1.6"></div>
+    <button id="testRunBtn" class="btn btn-green" onclick="runCustomTest()">Send</button>
+    <div id="testModalResult" class="result-box"></div>
   </div>
 </div>
 
@@ -296,14 +291,14 @@ async function saveSettings() {
 function openTestModal() {
   document.getElementById('testModal').classList.add('open');
   document.getElementById('testModalResult').style.display = 'none';
-  document.getElementById('testSender').focus();
+  setTimeout(() => document.getElementById('testSender').focus(), 50);
 }
 function closeTestModal() {
   document.getElementById('testModal').classList.remove('open');
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTestModal(); });
-document.getElementById('testModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('testModal')) closeTestModal();
+document.getElementById('testModal').addEventListener('click', function(e) {
+  if (e.target === this) closeTestModal();
 });
 
 async function runCustomTest() {
@@ -314,14 +309,16 @@ async function runCustomTest() {
   const el      = document.getElementById('testModalResult');
 
   if (!message) {
+    el.className = 'result-box err';
     el.style.display = 'block';
-    el.className = 'test-result err';
     el.textContent = '❌ Type a message first';
     return;
   }
 
-  btn.disabled = true; btn.textContent = 'Sending…';
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
   el.style.display = 'none';
+
   try {
     const r = await fetch('/test', {
       method: 'POST',
@@ -331,19 +328,23 @@ async function runCustomTest() {
     const d = await r.json();
     el.style.display = 'block';
     if (d.reply) {
-      el.className = 'test-result ok';
+      el.className = 'result-box ok';
       el.innerHTML = '<b style="color:#8b949e">Aria →</b> ' + d.reply +
-        (d.ctx_msgs !== undefined ? ' <span style="color:#8b949e;font-size:11px">(ctx: ' + d.ctx_msgs + ' msgs)</span>' : '');
+        (d.ctx_msgs !== undefined
+          ? ' <span style="color:#8b949e;font-size:11px">(ctx: ' + d.ctx_msgs + ' msgs)</span>'
+          : '');
     } else {
-      el.className = 'test-result err';
+      el.className = 'result-box err';
       el.textContent = '❌ ' + (d.error || 'Unknown error');
     }
   } catch(e) {
     el.style.display = 'block';
-    el.className = 'test-result err';
-    el.textContent = '❌ ' + e.message;
+    el.className = 'result-box err';
+    el.textContent = '❌ Fetch failed: ' + e.message;
   }
-  btn.disabled = false; btn.textContent = 'Send';
+
+  btn.disabled = false;
+  btn.textContent = 'Send';
 }
 
 async function loadLogs() {
@@ -357,7 +358,7 @@ async function loadLogs() {
   box.innerHTML = d.logs.slice().reverse().map(l => {
     const cls  = l.type==='sent'?'log-sent':l.type==='skip'?'log-skip':'log-err';
     const icon = l.type==='sent'?'✅':l.type==='skip'?'⏭':'❌';
-    return '<div class="log-entry ' + cls + '"><span class="log-time">' + l.time + '</span>' + icon + ' <b>' + l.sender + '</b>: ' + l.text + '</div>';
+    return '<div class="log-entry '+cls+'"><span class="log-time">'+l.time+'</span>'+icon+' <b>'+l.sender+'</b>: '+l.text+'</div>';
   }).join('');
 }
 
@@ -372,15 +373,15 @@ async function loadCtx() {
   }
   box.innerHTML = entries.map(([sender, info]) =>
     '<div style="margin-bottom:8px;padding:8px;background:#0d1117;border-radius:6px;border:1px solid #30363d">' +
-    '<b style="color:#e6edf3">' + sender + '</b>' +
-    '<span style="color:#25d366;margin-left:8px">' + info.count + ' msg' + (info.count!==1?'s':'') + '</span>' +
-    '<span style="color:#8b949e;margin-left:8px;font-size:11px">last: ' + info.last_seen + '</span>' +
+    '<b style="color:#e6edf3">'+sender+'</b>' +
+    '<span style="color:#25d366;margin-left:8px">'+info.count+' msg'+(info.count!==1?'s':'')+'</span>' +
+    '<span style="color:#8b949e;margin-left:8px;font-size:11px">last: '+info.last_seen+'</span>' +
     '</div>'
   ).join('');
 }
 
-function clearCtx()  { fetch('/contexts/clear', {method:'POST'}).then(loadCtx); }
-function clearLogs() { fetch('/logs/clear',      {method:'POST'}).then(loadLogs); }
+function clearCtx()  { fetch('/contexts/clear',{method:'POST'}).then(loadCtx); }
+function clearLogs() { fetch('/logs/clear',{method:'POST'}).then(loadLogs); }
 function copyUrl() {
   navigator.clipboard.writeText(document.getElementById('webhookUrl').textContent);
   event.target.textContent = 'Copied!';
@@ -417,7 +418,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def read_body(self):
-        return self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        length = int(self.headers.get("Content-Length", 0))
+        return self.rfile.read(length) if length > 0 else b""
 
     def add_log(self, t, sender, text):
         from datetime import datetime
@@ -461,31 +463,37 @@ class Handler(BaseHTTPRequestHandler):
 
         elif self.path == "/test":
             cfg = load_config()
+            sender  = "TestUser"
+            message = "Hello! Reply in a fun way to test if you are working."
+            use_ctx = False
             try:
-                body = json.loads(self.read_body())
-                sender  = (body.get("sender", "TestUser") or "TestUser").strip()
-                message = body.get("message", "Hello! Reply in a fun way to test if you are working.")
-                use_ctx = body.get("use_context", True)
-            except Exception:
-                sender  = "TestUser"
-                message = "Hello! Reply in a fun way to test if you are working."
-                use_ctx = False
+                raw = self.read_body()
+                if raw:
+                    body = json.loads(raw)
+                    sender  = (body.get("sender") or "TestUser").strip()
+                    message = (body.get("message") or message).strip()
+                    use_ctx = bool(body.get("use_context", False))
+            except Exception as parse_err:
+                self.send_json(200, {"error": f"Parse error: {parse_err}"}); return
 
-            saved_ctx = None
-            if not use_ctx and sender in CONTEXT:
-                saved_ctx = CONTEXT.pop(sender)
+            try:
+                saved_ctx = None
+                if not use_ctx and sender in CONTEXT:
+                    saved_ctx = CONTEXT.pop(sender)
 
-            ctx_count = len(get_context(sender, cfg))
-            reply, err = ask_groq(cfg, sender, message)
+                ctx_count = len(get_context(sender, cfg))
+                reply, err = ask_groq(cfg, sender, message)
 
-            if saved_ctx is not None:
-                CONTEXT[sender] = saved_ctx
+                if saved_ctx is not None:
+                    CONTEXT[sender] = saved_ctx
 
-            if reply:
-                self.add_log("sent", f"[TEST] {sender}", reply)
-                self.send_json(200, {"reply": reply, "ctx_msgs": ctx_count})
-            else:
-                self.send_json(200, {"error": err})
+                if reply:
+                    self.add_log("sent", f"[TEST] {sender}", reply)
+                    self.send_json(200, {"reply": reply, "ctx_msgs": ctx_count})
+                else:
+                    self.send_json(200, {"error": err or "No reply and no error — check API key"})
+            except Exception as e:
+                self.send_json(200, {"error": f"{type(e).__name__}: {str(e)}"})
 
         elif self.path == "/logs/clear":
             Handler.logs = []
