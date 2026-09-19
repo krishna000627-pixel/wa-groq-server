@@ -1,16 +1,10 @@
 """
 WA Groq Webhook Server
-- Receives POST from AutoResponder app
-- Calls Groq API
-- Returns {"replies": [{"message": "..."}]}
-- Serves a web dashboard to configure everything
-Run: python wa_groq_server.py
 """
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.error
 
-# ── Config file ────────────────────────────────────────────
 CONFIG_FILE = "wa_config.json"
 
 DEFAULT_CONFIG = {
@@ -30,7 +24,6 @@ def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE) as f:
             c = json.load(f)
-            # fill missing keys with defaults
             for k, v in DEFAULT_CONFIG.items():
                 c.setdefault(k, v)
             return c
@@ -40,7 +33,6 @@ def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
 
-# ── Groq call ──────────────────────────────────────────────
 def ask_groq(cfg, sender, message):
     api_key = cfg.get("groq_api_key", "")
     if not api_key:
@@ -61,12 +53,14 @@ def ask_groq(cfg, sender, message):
         data=body,
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0 (compatible; WAGroqBot/1.0)",
+            "Accept": "application/json"
         },
         method="POST"
     )
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with urllib.request.urlopen(req, timeout=25) as r:
             data = json.loads(r.read())
             reply = data["choices"][0]["message"]["content"].strip()
             if reply.upper().startswith("SKIP"):
@@ -78,7 +72,6 @@ def ask_groq(cfg, sender, message):
     except Exception as e:
         return None, str(e)
 
-# ── HTML Dashboard ─────────────────────────────────────────
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,10 +133,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <h1>WA Groq Server</h1>
   <span class="status-dot"></span>
 </header>
-
 <div class="container">
-
-  <!-- Webhook URL -->
   <div class="card">
     <h2>📡 Webhook URL</h2>
     <p style="font-size:13px;color:#8b949e;margin-bottom:12px">Paste this in AutoResponder app → Rule → Connect web server</p>
@@ -152,37 +142,26 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <button class="copy-btn" onclick="copyUrl()">Copy</button>
     </div>
   </div>
-
-  <!-- Settings -->
   <div class="card">
     <h2>⚙️ Settings</h2>
-
     <label>Groq API Key</label>
     <input type="password" id="apiKey" placeholder="gsk_..." />
-
     <label>Model</label>
     <select id="model">
-      <option value="llama3-8b-8192">llama3-8b-8192 — fast, real-time</option>
+      <option value="llama3-8b-8192">llama3-8b-8192 — fast</option>
       <option value="llama3-70b-8192">llama3-70b-8192 — smarter</option>
       <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
       <option value="gemma2-9b-it">gemma2-9b-it</option>
     </select>
-
     <label>System Prompt</label>
     <textarea id="prompt"></textarea>
-
     <label>Reply Delay</label>
     <div class="row">
-      <div class="field">
-        <input type="number" id="delayMin" placeholder="min" min="0" max="60" />
-      </div>
+      <div class="field"><input type="number" id="delayMin" placeholder="min" min="0" max="60" /></div>
       <div style="color:#8b949e;padding-bottom:10px">to</div>
-      <div class="field">
-        <input type="number" id="delayMax" placeholder="max" min="0" max="60" />
-      </div>
+      <div class="field"><input type="number" id="delayMax" placeholder="max" min="0" max="60" /></div>
       <div style="color:#8b949e;padding-bottom:10px">seconds</div>
     </div>
-
     <div class="toggle-row" style="margin-top:16px">
       <label class="toggle">
         <input type="checkbox" id="enabled" checked />
@@ -191,62 +170,48 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <span style="font-size:14px">Auto-reply enabled</span>
       <span class="saved-toast" id="savedToast">✓ Saved</span>
     </div>
-
     <div class="actions">
       <button class="btn btn-green" onclick="saveSettings()">Save Settings</button>
       <button class="btn btn-outline" onclick="testGroq()">Test Groq</button>
     </div>
     <div class="test-result" id="testResult"></div>
   </div>
-
-  <!-- Logs -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <h2 style="margin:0">📋 Recent Activity</h2>
       <button class="copy-btn" onclick="clearLogs()">Clear</button>
     </div>
     <div class="log-box" id="logBox">
-      <div style="color:#8b949e;text-align:center;padding:20px">No activity yet — waiting for messages</div>
+      <div style="color:#8b949e;text-align:center;padding:20px">No activity yet</div>
     </div>
   </div>
-
 </div>
-
 <script>
-let logs = [];
-
-// ── Load config ─────────────────────────────────────────
 async function loadConfig() {
   const r = await fetch('/config');
   const c = await r.json();
-  document.getElementById('apiKey').value   = c.groq_api_key || '';
-  document.getElementById('model').value    = c.groq_model || 'llama3-8b-8192';
-  document.getElementById('prompt').value   = c.system_prompt || '';
+  document.getElementById('apiKey').value = c.groq_api_key || '';
+  document.getElementById('model').value = c.groq_model || 'llama3-8b-8192';
+  document.getElementById('prompt').value = c.system_prompt || '';
   document.getElementById('delayMin').value = c.delay_min ?? 8;
   document.getElementById('delayMax').value = c.delay_max ?? 12;
   document.getElementById('enabled').checked = c.enabled !== false;
-
-  // Webhook URL
   document.getElementById('webhookUrl').textContent = window.location.origin + '/webhook';
 }
-
-// ── Save config ─────────────────────────────────────────
 async function saveSettings() {
   const cfg = {
-    groq_api_key:  document.getElementById('apiKey').value.trim(),
-    groq_model:    document.getElementById('model').value,
+    groq_api_key: document.getElementById('apiKey').value.trim(),
+    groq_model: document.getElementById('model').value,
     system_prompt: document.getElementById('prompt').value,
-    delay_min:     parseInt(document.getElementById('delayMin').value) || 8,
-    delay_max:     parseInt(document.getElementById('delayMax').value) || 12,
-    enabled:       document.getElementById('enabled').checked
+    delay_min: parseInt(document.getElementById('delayMin').value) || 8,
+    delay_max: parseInt(document.getElementById('delayMax').value) || 12,
+    enabled: document.getElementById('enabled').checked
   };
   await fetch('/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg)});
   const t = document.getElementById('savedToast');
   t.style.display = 'inline';
   setTimeout(() => t.style.display = 'none', 2000);
 }
-
-// ── Test Groq ───────────────────────────────────────────
 async function testGroq() {
   const btn = event.target;
   btn.disabled = true; btn.textContent = 'Testing...';
@@ -270,8 +235,6 @@ async function testGroq() {
   }
   btn.disabled = false; btn.textContent = 'Test Groq';
 }
-
-// ── Logs ────────────────────────────────────────────────
 async function loadLogs() {
   const r = await fetch('/logs');
   const d = await r.json();
@@ -281,37 +244,28 @@ async function loadLogs() {
     return;
   }
   box.innerHTML = d.logs.slice().reverse().map(l => {
-    const cls = l.type === 'sent' ? 'log-sent' : l.type === 'skip' ? 'log-skip' : 'log-err';
-    const icon = l.type === 'sent' ? '✅' : l.type === 'skip' ? '⏭' : '❌';
-    return `<div class="log-entry ${cls}">
-      <span class="log-time">${l.time}</span>${icon} <b>${l.sender}</b>: ${l.text}
-    </div>`;
+    const cls = l.type==='sent'?'log-sent':l.type==='skip'?'log-skip':'log-err';
+    const icon = l.type==='sent'?'✅':l.type==='skip'?'⏭':'❌';
+    return `<div class="log-entry ${cls}"><span class="log-time">${l.time}</span>${icon} <b>${l.sender}</b>: ${l.text}</div>`;
   }).join('');
 }
-
-function clearLogs() { fetch('/logs/clear', {method:'POST'}).then(loadLogs); }
-
+function clearLogs() { fetch('/logs/clear',{method:'POST'}).then(loadLogs); }
 function copyUrl() {
   navigator.clipboard.writeText(document.getElementById('webhookUrl').textContent);
-  event.target.textContent = 'Copied!';
-  setTimeout(() => event.target.textContent = 'Copy', 1500);
+  event.target.textContent='Copied!';
+  setTimeout(()=>event.target.textContent='Copy',1500);
 }
-
-// ── Poll logs every 3s ──────────────────────────────────
 loadConfig();
 loadLogs();
 setInterval(loadLogs, 3000);
 </script>
 </body>
-</html>
-"""
+</html>"""
 
-# ── HTTP Handler ───────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
-    logs = []  # in-memory log
+    logs = []
 
-    def log_message(self, fmt, *args):
-        pass  # silence default access logs
+    def log_message(self, fmt, *args): pass
 
     def send_json(self, code, data):
         body = json.dumps(data).encode()
@@ -342,10 +296,10 @@ class Handler(BaseHTTPRequestHandler):
             "text": text[:120],
             "time": datetime.now().strftime("%H:%M:%S")
         })
-        Handler.logs = Handler.logs[-50:]  # keep last 50
+        Handler.logs = Handler.logs[-50:]
 
     def do_GET(self):
-        if self.path == "/" or self.path == "/dashboard":
+        if self.path in ("/", "/dashboard"):
             self.send_html(DASHBOARD_HTML)
         elif self.path == "/config":
             self.send_json(200, load_config())
@@ -379,7 +333,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"status": "cleared"})
 
         elif self.path == "/webhook":
-            # AutoResponder sends here
             try:
                 body = json.loads(self.read_body())
             except Exception:
@@ -387,46 +340,29 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             cfg = load_config()
-
             if not cfg.get("enabled", True):
                 self.send_json(200, {"replies": []})
                 return
 
-            query   = body.get("query", {})
-            sender  = query.get("sender", "Unknown")
+            query = body.get("query", {})
+            sender = query.get("sender", "Unknown")
             message = query.get("message", "")
-            is_group = query.get("isGroup", False)
 
             print(f"[WA] {sender}: {message[:80]}")
-
             reply, err = ask_groq(cfg, sender, message)
 
             if reply:
-                delay_min = cfg.get("delay_min", 8)
-                delay_max = cfg.get("delay_max", 12)
-                self.add_log("sent", sender, f'→ "{reply}"')
+                self.add_log("sent", sender, f'-> "{reply}"')
                 self.send_json(200, {
                     "replies": [{
                         "message": reply,
-                        "delay": delay_min,
-                        "delayMax": delay_max
+                        "delay": cfg.get("delay_min", 8),
+                        "delayMax": cfg.get("delay_max", 12)
                     }]
                 })
             else:
                 self.add_log("skip", sender, f'skipped — {err}')
-                # Empty replies = AutoResponder does nothing
                 self.send_json(200, {"replies": []})
-
-        elif self.path == "/options":
-            # Handle CORS preflight
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
-            self.end_headers()
-
-        else:
-            self.send_json(404, {"error": "not found"})
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -435,13 +371,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
-
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 8080))
-    print(f"╔══════════════════════════════════════╗")
-    print(f"  WA Groq Server running on port {PORT}")
-    print(f"  Dashboard → http://localhost:{PORT}")
-    print(f"  Webhook   → http://localhost:{PORT}/webhook")
-    print(f"╚══════════════════════════════════════╝")
+    print(f"WA Groq Server on port {PORT}")
+    print(f"Dashboard -> http://localhost:{PORT}")
     server = HTTPServer(("0.0.0.0", PORT), Handler)
     server.serve_forever()
