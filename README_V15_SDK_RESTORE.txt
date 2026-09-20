@@ -14,3 +14,9 @@ Render requirements:
 - GROQ_API_KEY must be set as a Render environment variable.
 - requirements.txt installs the official Groq SDK.
 - Start command can remain: python wa_groq_server.py
+
+
+V16 UI/context patch:
+- Context rows are now tappable and open a dedicated conversation context view.
+- Recent Home activity rows also open the matching context when available.
+- Added prompt-injection resistance for untrusted incoming message content.
