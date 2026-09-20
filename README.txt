@@ -1,13 +1,8 @@
-ARIA Native UI — Reference Build
+ARIA V4 — compact native-style mobile dashboard
 
-dashboard.html is a mobile-first native-style WebView dashboard matching the supplied reference:
-- dark app bar
-- green Aria identity/status
-- Webhook card
-- AI Configuration card
-- prompt category selector
-- built-in anti-hallucination AI prompt
-- 3-day IST context controls
-- bottom navigation: Home / Contexts / Activity / Settings
+Files:
+- dashboard.html — mobile-first Aria UI
+- wa_groq_server.py — Groq/WhatsApp webhook backend
+- requirements.txt — Python dependency
 
-Replace dashboard.html in the server project, then commit and push.
+The UI uses fixed compact mobile proportions and does not scale the whole page. Settings are separate pages, Contexts show the actual received/replied conversation, Debug only exposes API connection status, and About shows Krishna Tiwari / Class 12 PCM information.

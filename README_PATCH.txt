@@ -1,38 +1,25 @@
-ARIA BACKEND FIX
+ARIA NATIVE UI V5
+==================
 
-What changed:
-1. Replaced urllib/Python-urllib Groq transport with Groq's official Python SDK.
-2. Added the groq dependency.
-3. Debug endpoint now reports the SDK transport and a sanitized completion result.
-4. Context expiry is based on IST calendar dates: today + previous 2 dates.
-5. Runtime supplies current IST, last interaction, gap minutes and fresh-context state.
-6. 1-5 hour return gaps trigger a brief AI-agent greeting instruction.
-7. Built-in prompt is restored if the dashboard prompt becomes blank/deleted.
-8. Requests for things Krishna personally must handle no longer cause the model to invent a subject/book/item.
-9. GROQ_API_KEY from Render environment is not exposed through /config.
+Changes:
+- Native-style bottom navigation matching the supplied reference.
+- Settings is a clean list of bold white titles only.
+- Every Settings item opens its own page.
+- AI Configuration shows only API connected / API not connected; no API key is displayed.
+- Debug page tests the real /debug endpoint and reports connection status.
+- Test Assistant sends through the real /webhook endpoint.
+- Contexts includes TestUser preview.
+- Context detail shows received messages and Aria replies.
+- Backend now logs received messages as well as sent/skip/error events.
+- About page includes Krishna Tiwari, Class 12 PCM and Aria application details.
+- Inline SVG/CSS icons and the Home banner are embedded; no external image dependency.
 
-Install:
-pip install -r requirements.txt
-
-Run:
-python wa_groq_server.py
-
-Termux replacement:
-cd ~/wa-groq-server
-cp wa_groq_server.py wa_groq_server.py.bak
-cp requirements.txt requirements.txt.bak
-# Copy the files from this ZIP into the repo, then:
-git add wa_groq_server.py requirements.txt
-git commit -m "fix: use official Groq SDK and harden Aria context"
-git push
-
-Test:
-curl -s https://YOUR-RENDER-SERVICE.onrender.com/health
-
-curl -s https://YOUR-RENDER-SERVICE.onrender.com/debug
-
-curl -s -X POST https://YOUR-RENDER-SERVICE.onrender.com/webhook   -H "Content-Type: application/json"   -d '{"sender":"TestUser","message":"Say hello in one short sentence."}'
+Termux:
+  cd ~/wa-groq-server
+  unzip -o ~/Downloads/aria_native_ui_v5.zip
+  git add dashboard.html wa_groq_server.py
+  git commit -m "feat: native Aria UI v5 with context detail and working debug"
+  git push
 
 Important:
-Keep GROQ_API_KEY only in Render Environment Variables.
-Do not put the key in the APK, dashboard source, GitHub, or this ZIP.
+The ZIP contains the two replacement files only. Keep your existing wa_config.json and deployment files.
