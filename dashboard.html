@@ -18,7 +18,7 @@ font-family:Roboto,"Segoe UI",system-ui,-apple-system,sans-serif;
 -webkit-tap-highlight-color:transparent}
 body{padding-bottom:88px}
 button,input,select,textarea{font:inherit}
-button{cursor:pointer}
+button{cursor:pointer;color:inherit}
 .top{
   position:sticky;top:0;z-index:50;height:92px;
   display:flex;align-items:center;gap:13px;padding:14px 20px;
@@ -86,7 +86,7 @@ box-shadow:0 7px 22px rgba(33,239,118,.16)}
 .page-title{font-size:28px;margin:7px 0 3px}.page-sub{color:var(--muted);font-size:14px;margin:0 0 20px}
 .search{display:flex;align-items:center;gap:8px;border:1px solid var(--line2);background:#06100d;border-radius:15px;padding:11px 13px}
 .search input{border:0;outline:0;background:transparent;color:white;width:100%;font-size:13px}.search svg{width:19px;color:#718983}
-.context-card{display:flex;align-items:center;gap:12px;padding:13px;border:1px solid var(--line);background:#07130f;border-radius:16px;margin-top:9px}
+.context-card{display:flex;width:100%;text-align:left;color:inherit;cursor:pointer;align-items:center;gap:12px;padding:13px;border:1px solid var(--line);background:#07130f;border-radius:16px;margin-top:9px}
 .context-avatar{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:16px}
 .context-main{flex:1}.context-name{font-weight:750}.context-meta{font-size:11px;color:#879c96;margin-top:3px}.chev{color:#81928e}
 .retention{margin-top:14px;border:1px solid #15563f;background:#06251a;border-radius:17px;padding:14px;display:flex;gap:12px}
@@ -106,7 +106,9 @@ box-shadow:0 7px 22px rgba(33,239,118,.16)}
 .empty{padding:26px 8px;text-align:center;color:#71837e;font-size:13px}
 pre.debug{white-space:pre-wrap;word-break:break-word;background:#020806;border:1px solid var(--line);border-radius:14px;padding:12px;color:#b6cbc4;font-size:10px;max-height:420px;overflow:auto}
 @media(max-width:420px){main{padding-left:13px;padding-right:13px}.hero{min-height:184px}.hero-bot{width:155px;height:155px;right:4px}.stats{gap:9px}.stat{padding:13px}.top{padding-left:14px;padding-right:14px}}
-</style>
+
+.settings-subpage{display:none}.settings-subpage.active-sub{display:block}.backbtn{border:0;background:transparent;color:#9fb3ad;font-size:14px;font-weight:750;padding:5px 0 10px}.connection{display:flex;align-items:center;gap:12px;margin-bottom:12px}.connection>div:nth-child(2){flex:1}.connection .btn{flex:none}.dot.off{background:#ff4f57;box-shadow:none}.muted{color:var(--muted)}.small{font-size:11px;line-height:1.45}.context-policy{margin-top:16px;padding:13px;border:1px solid #164236;border-radius:15px;background:#06140f}.context-policy p{font-size:11px;color:#9ab0aa;line-height:1.5;margin:5px 0 0}.resultbox{margin-top:14px;padding:13px;border:1px solid var(--line);border-radius:14px;background:#020806;color:#b8cbc5;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word}.about-card{text-align:center}.about-logo{width:66px;height:66px;margin:0 auto 10px;border-radius:21px;display:grid;place-items:center;background:#063b29;color:var(--green);font-size:32px;box-shadow:0 0 28px rgba(33,239,118,.16)}.about-card h2{margin:4px 0}.about-card p{margin:0 0 18px;color:var(--muted)}.about-line{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line);font-size:11px;text-align:left}.about-line span{color:var(--muted)}.about-line strong{font-weight:700;text-align:right}
+.message-row{padding:13px;margin-bottom:9px;border:1px solid var(--line);border-radius:15px;background:#06110e}.message-row.outgoing{border-color:#14563d;background:#062017}.message-role{font-size:10px;color:var(--green);font-weight:800;text-transform:uppercase;letter-spacing:.06em}.message-text{font-size:13px;line-height:1.45;margin-top:5px}.message-time{font-size:9px;color:#71847f;margin-top:6px}.settings-subpage .page-title{margin-top:4px}</style>
 </head>
 <body>
 <header class="top">
@@ -178,6 +180,12 @@ pre.debug{white-space:pre-wrap;word-break:break-word;background:#020806;border:1
   <div class="retention"><div class="r-ico"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 3h10l3 3v15H4V6l3-3Zm0 3h10V5H7v1Zm0 4h10V8H7v2Zm0 4h10v-2H7v2Z"/></svg></div><div><strong>Context Retention</strong><p>Messages are kept for <span id="retentionDays">3</span> days (IST). Old context is automatically removed.</p></div></div>
 </section>
 
+<section id="contextDetail" class="page">
+  <button class="backbtn" onclick="go('contexts')">‹ Contexts</button>
+  <h1 id="detailName" class="page-title">Conversation</h1><p id="detailMeta" class="page-sub">Message context</p>
+  <div id="detailMessages" class="card"><div class="empty">No messages.</div></div>
+</section>
+
 <section id="activity" class="page">
   <h1 class="page-title">Activity Log</h1><p class="page-sub">Real-time server activity</p>
   <div class="filters">
@@ -190,25 +198,57 @@ pre.debug{white-space:pre-wrap;word-break:break-word;background:#020806;border:1
 </section>
 
 <section id="settings" class="page">
-  <h1 class="page-title">Settings</h1><p class="page-sub">Configure your AI assistant</p>
-  <div class="settings-list">
-    <button class="setting-row" onclick="showConfig()"><span class="setting-ico">⚙</span><span class="setting-main"><span class="setting-title">AI Configuration</span><span class="setting-sub">API key, model, prompt, etc.</span></span><span class="setting-arrow">›</span></button>
-    <button class="setting-row" onclick="showConfig()"><span class="setting-ico">▤</span><span class="setting-main"><span class="setting-title">Context Settings</span><span class="setting-sub">Retention, max messages</span></span><span class="setting-arrow">›</span></button>
-    <button class="setting-row" onclick="toast('Reply delay is controlled by the server configuration.')"><span class="setting-ico">◷</span><span class="setting-main"><span class="setting-title">Reply Delay</span><span class="setting-sub">Min / Max delay for responses</span></span><span class="setting-arrow">›</span></button>
-    <button class="setting-row" onclick="testAssistant()"><span class="setting-ico">▷</span><span class="setting-main"><span class="setting-title">Test Assistant</span><span class="setting-sub">Send a test message</span></span><span class="setting-arrow">›</span></button>
-    <button class="setting-row" onclick="runDebug()"><span class="setting-ico">›_</span><span class="setting-main"><span class="setting-title">Debug</span><span class="setting-sub">Test Groq API connection</span></span><span class="setting-arrow">›</span></button>
-    <button class="setting-row" onclick="toast('Aria — WhatsApp AI Assistant')"><span class="setting-ico">ⓘ</span><span class="setting-main"><span class="setting-title">About</span><span class="setting-sub">App information</span></span><span class="setting-arrow">›</span></button>
+  <div id="settingsListPage" class="settings-subpage active-sub">
+    <h1 class="page-title">Settings</h1><p class="page-sub">Configure your AI assistant</p>
+    <div class="settings-list">
+      <button class="setting-row" onclick="openSetting('ai')"><span class="setting-ico">⚙</span><span class="setting-main"><span class="setting-title">AI Configuration</span><span class="setting-sub">Model, prompt and connection</span></span><span class="setting-arrow">›</span></button>
+      <button class="setting-row" onclick="openSetting('context')"><span class="setting-ico">▤</span><span class="setting-main"><span class="setting-title">Context Settings</span><span class="setting-sub">Retention and message limits</span></span><span class="setting-arrow">›</span></button>
+      <button class="setting-row" onclick="openSetting('delay')"><span class="setting-ico">◷</span><span class="setting-main"><span class="setting-title">Reply Delay</span><span class="setting-sub">Minimum / maximum response delay</span></span><span class="setting-arrow">›</span></button>
+      <button class="setting-row" onclick="openSetting('test')"><span class="setting-ico">▷</span><span class="setting-main"><span class="setting-title">Test Assistant</span><span class="setting-sub">Send a test message</span></span><span class="setting-arrow">›</span></button>
+      <button class="setting-row" onclick="openSetting('debug')"><span class="setting-ico">›_</span><span class="setting-main"><span class="setting-title">Debug</span><span class="setting-sub">Check Groq API connection</span></span><span class="setting-arrow">›</span></button>
+      <button class="setting-row" onclick="openSetting('about')"><span class="setting-ico">ⓘ</span><span class="setting-main"><span class="setting-title">About</span><span class="setting-sub">Aria app information</span></span><span class="setting-arrow">›</span></button>
+    </div>
   </div>
 
-  <div id="configPanel" class="card" style="display:none">
-    <div class="card-title">AI Configuration</div>
-    <label class="field-label">Groq API Key</label><input id="apiKey" class="field" type="password" placeholder="gsk_…">
-    <label class="field-label">Model</label><select id="model"><option>openai/gpt-oss-120b</option><option>openai/gpt-oss-20b</option><option>llama-3.3-70b-versatile</option><option>llama-3.1-8b-instant</option></select>
-    <label class="field-label">Prompt Category</label><select id="category" onchange="applyCategory()"><option value="default">Default AI Assistant</option><option value="professional">Professional AI Assistant</option><option value="casual">Casual AI Assistant</option><option value="concise">Concise AI Agent</option></select>
-    <label class="field-label">System Prompt</label><textarea id="prompt"></textarea>
-    <div class="grid2"><div><label class="field-label">Context Days</label><input id="ctxDays" class="field" type="number" min="1" max="7" value="3"></div><div><label class="field-label">Max Messages</label><input id="ctxMax" class="field" type="number" min="1" max="30" value="12"></div></div>
-    <div class="actions"><button class="btn primary" onclick="save()">Save Settings</button><button class="btn" onclick="testAssistant()">Test Groq</button><button class="btn danger" onclick="runDebug()">Debug</button></div>
-    <pre id="debugOut" class="debug" style="display:none"></pre>
+  <div id="settingAi" class="settings-subpage">
+    <button class="backbtn" onclick="closeSetting()">‹ Settings</button><h1 class="page-title">AI Configuration</h1><p class="page-sub">Model, prompt and Groq connection</p>
+    <div class="card">
+      <div class="connection"><span id="apiDot" class="dot"></span><div><strong id="apiStatusText">Checking API connection…</strong><div id="apiStatusSub" class="muted">Server connection status</div></div><button class="btn" onclick="checkApi()">Refresh</button></div>
+      <label class="field-label">Groq API Key</label><input id="apiKey" class="field" type="password" placeholder="Configured on server / gsk_…">
+      <div class="muted small">The full API key is never displayed. Prefer the Render environment variable GROQ_API_KEY.</div>
+      <label class="field-label">Model</label><select id="model"><option>openai/gpt-oss-120b</option><option>openai/gpt-oss-20b</option><option>llama-3.3-70b-versatile</option><option>llama-3.1-8b-instant</option></select>
+      <label class="field-label">Prompt Category</label><select id="category" onchange="applyCategory()"><option value="default">Default AI Assistant</option><option value="professional">Professional AI Assistant</option><option value="casual">Casual AI Assistant</option><option value="concise">Concise AI Agent</option></select>
+      <label class="field-label">System Prompt</label><textarea id="prompt"></textarea>
+      <div class="actions"><button class="btn primary" onclick="save()">Save Settings</button></div>
+    </div>
+  </div>
+
+  <div id="settingContext" class="settings-subpage">
+    <button class="backbtn" onclick="closeSetting()">‹ Settings</button><h1 class="page-title">Context Settings</h1><p class="page-sub">Control what Aria keeps and sends to the model</p>
+    <div class="card"><div class="grid2"><div><label class="field-label">Context Days</label><input id="ctxDays" class="field" type="number" min="1" max="7" value="3"></div><div><label class="field-label">Max Messages</label><input id="ctxMax" class="field" type="number" min="1" max="30" value="12"></div></div>
+    <div class="context-policy"><strong>IST retention</strong><p>Context is retained by IST calendar date. Messages outside the configured window are eligible for removal. The active conversation messages shown in Contexts are the same records available to the server for context handling.</p></div>
+    <div class="actions"><button class="btn primary" onclick="save()">Save Settings</button></div></div>
+  </div>
+
+  <div id="settingDelay" class="settings-subpage">
+    <button class="backbtn" onclick="closeSetting()">‹ Settings</button><h1 class="page-title">Reply Delay</h1><p class="page-sub">Control simulated response timing</p>
+    <div class="card"><div class="grid2"><div><label class="field-label">Minimum seconds</label><input id="delayMin" class="field" type="number" min="0" value="8"></div><div><label class="field-label">Maximum seconds</label><input id="delayMax" class="field" type="number" min="0" value="12"></div></div><div class="muted small">The server response may return its own delay values. These fields are stored as UI preferences unless your backend exposes delay configuration.</div><div class="actions"><button class="btn primary" onclick="saveDelay()">Save Delay</button></div></div>
+  </div>
+
+  <div id="settingTest" class="settings-subpage">
+    <button class="backbtn" onclick="closeSetting()">‹ Settings</button><h1 class="page-title">Test Assistant</h1><p class="page-sub">Send a controlled test request to the webhook</p>
+    <div class="card"><label class="field-label">Test message</label><input id="testMessage" class="field" value="Hi Aria, how are you?">
+    <div class="actions"><button class="btn primary" onclick="testAssistant(true)">Send Test</button></div><div id="testResult" class="resultbox">No test run yet.</div></div>
+  </div>
+
+  <div id="settingDebug" class="settings-subpage">
+    <button class="backbtn" onclick="closeSetting()">‹ Settings</button><h1 class="page-title">Debug</h1><p class="page-sub">Check whether the Groq API path is working</p>
+    <div class="card"><div class="connection"><span id="debugDot" class="dot off"></span><div><strong id="debugStatus">Not checked</strong><div class="muted">Connection result</div></div></div><button class="btn primary" onclick="runDebug(true)">Check API</button><div id="debugOut" class="resultbox">No debug result yet.</div></div>
+  </div>
+
+  <div id="settingAbout" class="settings-subpage">
+    <button class="backbtn" onclick="closeSetting()">‹ Settings</button><h1 class="page-title">About</h1><p class="page-sub">Aria — WhatsApp AI Assistant</p>
+    <div class="card about-card"><div class="about-logo">✦</div><h2>Aria</h2><p>Krishna's AI Assistant</p><div class="about-line"><span>Application</span><strong>WA Groq — Aria</strong></div><div class="about-line"><span>Context</span><strong>IST-based retention</strong></div><div class="about-line"><span>AI</span><strong>Groq-compatible backend</strong></div></div>
   </div>
 </section>
 </main>
@@ -270,8 +310,11 @@ const PROMPTS={
 let state={contexts:[],logs:[],config:{contextDays:3,maxMessages:12,autoReply:true},filter:"all"};
 
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(window._toast);window._toast=setTimeout(()=>e.style.display='none',2300)}
-function go(page){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(page).classList.add('active');document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page===page));if(page==='contexts')renderContexts();if(page==='activity')renderActivity();if(page==='settings')loadConfigUI()}
-function showConfig(){document.getElementById('configPanel').style.display='block';loadConfigUI();document.getElementById('configPanel').scrollIntoView({behavior:'smooth',block:'start'})}
+function go(page){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(page).classList.add('active');document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.page===page));if(page==='contexts')renderContexts();if(page==='activity')renderActivity();if(page==='settings'){closeSetting(true);loadConfigUI()}}
+function openSetting(which){document.querySelectorAll('.settings-subpage').forEach(x=>x.classList.remove('active-sub'));const id=which==='ai'?'settingAi':which==='context'?'settingContext':which==='delay'?'settingDelay':which==='test'?'settingTest':which==='debug'?'settingDebug':'settingAbout';document.getElementById('settingsListPage').classList.remove('active-sub');document.getElementById(id).classList.add('active-sub');if(which==='ai')checkApi();if(which==='debug')runDebug(false);window.scrollTo({top:0,behavior:'smooth'})}
+function closeSetting(silent=false){document.querySelectorAll('.settings-subpage').forEach(x=>x.classList.remove('active-sub'));document.getElementById('settingsListPage').classList.add('active-sub');if(!silent)window.scrollTo({top:0,behavior:'smooth'})}
+function openContext(i){const c=state.contexts[i];if(!c)return;const name=c.sender||c.name||c.id||'Unknown';document.getElementById('detailName').textContent=name;document.getElementById('detailMeta').textContent=`${c.messages?.length||c.messageCount||c.count||0} messages · ${formatTime(c.lastMessageAt||c.last||c.updatedAt||'')}`;const msgs=c.messages||c.history||c.context||[];const box=document.getElementById('detailMessages');if(!Array.isArray(msgs)||!msgs.length){box.innerHTML='<div class="empty">No message history was returned by the server for this context.</div>'}else{box.innerHTML=msgs.map(m=>{const role=String(m.role||m.from||m.type||'').toLowerCase();const incoming=role.includes('user')||role.includes('in')||role.includes('received');const text=m.message||m.content||m.text||m.body||'';return `<div class="message-row ${incoming?'incoming':'outgoing'}"><div class="message-role">${incoming?'Received':'Aria reply'}</div><div class="message-text">${esc(text)}</div><div class="message-time">${esc(formatTime(m.timestamp||m.time||m.createdAt||''))}</div></div>`}).join('')}go('contextDetail')}
+function showConfig(){openSetting('ai')}
 function svgIcon(kind){return kind==='sent'?'▣':kind==='skip'?'⚑':kind==='err'?'!':'●'}
 function classify(x){let s=String(x||'').toLowerCase();if(s.includes('error'))return'err';if(s.includes('skip'))return'skip';if(s.includes('sent')||s.includes('reply'))return'sent';return'recv'}
 function normArray(x){if(Array.isArray(x))return x;if(x&&Array.isArray(x.contexts))return x.contexts;if(x&&Array.isArray(x.logs))return x.logs;if(x&&Array.isArray(x.activity))return x.activity;return[]}
@@ -289,7 +332,7 @@ function loadConfigUI(){
   if(document.getElementById('ctxDays'))document.getElementById('ctxDays').value=c.contextDays||3;
   if(document.getElementById('ctxMax'))document.getElementById('ctxMax').value=c.maxMessages||12;
   document.getElementById('autoSwitch').classList.toggle('on',c.autoReply!==false);
-  document.getElementById('retentionDays').textContent=c.contextDays||3;
+  document.getElementById('retentionDays').textContent=c.contextDays||3;const d=JSON.parse(localStorage.getItem('ariaDelay')||'null');if(d){if(document.getElementById('delayMin'))document.getElementById('delayMin').value=d.min;if(document.getElementById('delayMax'))document.getElementById('delayMax').value=d.max}
 }
 async function save(){
   const payload={apiKey:document.getElementById('apiKey')?.value||'',model:document.getElementById('model')?.value||'openai/gpt-oss-120b',prompt:document.getElementById('prompt')?.value||DEFAULT_PROMPT,contextDays:Number(document.getElementById('ctxDays')?.value||3),maxMessages:Number(document.getElementById('ctxMax')?.value||12),autoReply:state.config.autoReply!==false};
@@ -297,20 +340,17 @@ async function save(){
   catch(e){toast('Save failed: '+e.message)}
 }
 function applyCategory(){const v=document.getElementById('category')?.value||'default';if(document.getElementById('prompt'))document.getElementById('prompt').value=PROMPTS[v]||DEFAULT_PROMPT}
-async function testAssistant(){
-  try{
-    const r=await api('/webhook',{method:'POST',body:JSON.stringify({sender:'TestUser',message:'Hi Aria, how are you?'} )});
-    const msg=r?.replies?.[0]?.message||r?.message||JSON.stringify(r);
-    toast(msg.length>90?msg.slice(0,87)+'…':msg);refreshAll();
-  }catch(e){toast('Groq error: '+e.message)}
+async function testAssistant(fromPage=false){
+  try{const message=document.getElementById('testMessage')?.value||'Hi Aria, how are you?';const r=await api('/webhook',{method:'POST',body:JSON.stringify({sender:'TestUser',message})});const msg=r?.replies?.[0]?.message||r?.message||JSON.stringify(r);if(document.getElementById('testResult'))document.getElementById('testResult').textContent=`Received test message:\n${message}\n\nAria reply:\n${msg}\n\nDelay: ${r?.replies?.[0]?.delay??'—'}–${r?.replies?.[0]?.delayMax??'—'}s`;if(!fromPage)toast(msg.length>90?msg.slice(0,87)+'…':msg);refreshAll();}
+  catch(e){if(document.getElementById('testResult'))document.getElementById('testResult').textContent='Test failed: '+e.message;toast('Test failed')}
 }
-async function runDebug(){
-  document.getElementById('configPanel').style.display='block';
-  document.getElementById('debugOut').style.display='block';
-  document.getElementById('debugOut').textContent='Running debug…';
-  try{const r=await api('/debug',{method:'POST',body:JSON.stringify({message:'Say hello in one short sentence.'})});document.getElementById('debugOut').textContent=JSON.stringify(r,null,2);toast('Debug complete');}
-  catch(e){document.getElementById('debugOut').textContent=e.message;toast('Debug failed')}
-}
+async function runDebug(fromPage=true){
+  if(!fromPage) return;
+  const out=document.getElementById('debugOut'), status=document.getElementById('debugStatus'), dot=document.getElementById('debugDot');if(out)out.textContent='Checking /debug…';if(status)status.textContent='Checking API connection…';if(dot)dot.classList.remove('off');
+  try{let r;try{r=await api('/debug')}catch{r=await api('/debug',{method:'POST',body:JSON.stringify({message:'Say hello in one short sentence.'})})}const ok=!!r && (r.status===200 || r.groq_error==null || r.ok===true);if(status)status.textContent=ok?'API connected':'API returned an error';if(dot)dot.classList.toggle('off',!ok);if(out){const safe={status:r?.status??200,transport:r?.transport||'server',connected:ok,error:r?.groq_error||null};out.textContent=JSON.stringify(safe,null,2)}if(ok)toast('API connected');else toast('API error')}catch(e){if(status)status.textContent='API not connected';if(dot)dot.classList.add('off');if(out)out.textContent=e.message;toast('API connection failed')}}
+async function checkApi(){
+  const dot=document.getElementById('apiDot'), text=document.getElementById('apiStatusText'), sub=document.getElementById('apiStatusSub');if(text)text.textContent='Checking API connection…';if(dot)dot.classList.remove('off');try{let r;try{r=await api('/debug')}catch{r=await api('/debug',{method:'POST',body:JSON.stringify({message:'Say hello in one short sentence.'})})}const ok=!!r && (r.status===200 || r.groq_error==null || r.ok===true);if(dot)dot.classList.toggle('off',!ok);if(text)text.textContent=ok?'API connected':'API error';if(sub)sub.textContent=ok?'Groq endpoint responded successfully':'Check Render environment and server logs'}catch(e){if(dot)dot.classList.add('off');if(text)text.textContent='API not connected';if(sub)sub.textContent=e.message}}
+function saveDelay(){localStorage.setItem('ariaDelay',JSON.stringify({min:Number(document.getElementById('delayMin').value||0),max:Number(document.getElementById('delayMax').value||0)}));toast('Reply delay saved')}
 async function refreshContexts(){
   try{const d=await api('/contexts');state.contexts=normArray(d);document.getElementById('activeCount').textContent=state.contexts.length;renderContexts()}
   catch(e){state.contexts=[];document.getElementById('activeCount').textContent='0'}
@@ -324,7 +364,7 @@ function renderContexts(){
  const list=state.contexts.filter(x=>String(x.sender||x.name||x.id||'').toLowerCase().includes(q));
  const box=document.getElementById('contextList');if(!box)return;
  if(!list.length){box.innerHTML='<div class="empty">No active contexts.</div>';return}
- box.innerHTML=list.map((x,i)=>{const name=x.sender||x.name||x.id||'Unknown';const count=x.messages?.length||x.messageCount||x.count||0;const last=x.lastMessageAt||x.last||x.updatedAt||'';return `<div class="context-card"><div class="context-avatar" style="background:${['#0b9e56','#267eb5','#d58b20','#bd3c82','#6b55b5'][i%5]}">${esc(name[0].toUpperCase())}</div><div class="context-main"><div class="context-name">${esc(name)}</div><div class="context-meta">${count} messages</div><div class="context-meta">Last: ${esc(formatTime(last))}</div></div><div class="chev">›</div></div>`}).join('')
+ box.innerHTML=list.map((x,i)=>{const name=x.sender||x.name||x.id||'Unknown';const count=x.messages?.length||x.messageCount||x.count||0;const last=x.lastMessageAt||x.last||x.updatedAt||'';return `<button class="context-card" onclick="openContext(${state.contexts.indexOf(x)})"><div class="context-avatar" style="background:${['#0b9e56','#267eb5','#d58b20','#bd3c82','#6b55b5'][i%5]}">${esc(name[0].toUpperCase())}</div><div class="context-main"><div class="context-name">${esc(name)}</div><div class="context-meta">${count} messages</div><div class="context-meta">Last: ${esc(formatTime(last))}</div></div><div class="chev">›</div></button>`}).join('')
 }
 function renderActivity(){
  const box=document.getElementById('activityList');if(!box)return;
