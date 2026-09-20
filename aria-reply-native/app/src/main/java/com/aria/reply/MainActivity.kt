@@ -1,30 +1,17 @@
 package com.aria.reply
-
-import android.content.Intent
-import android.os.Bundle
-import android.widget.Button
-import android.widget.EditText
-import android.widget.Switch
-import androidx.appcompat.app.AppCompatActivity
-
-class MainActivity : AppCompatActivity() {
-    private val prefs by lazy { getSharedPreferences("aria", MODE_PRIVATE) }
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        val auto = findViewById<Switch>(R.id.autoReply)
-        val backend = findViewById<EditText>(R.id.backendUrl)
-        val prompt = findViewById<EditText>(R.id.prompt)
-        val delay = findViewById<EditText>(R.id.delay)
-        auto.isChecked = prefs.getBoolean("auto", false)
-        backend.setText(prefs.getString("backend", backend.text.toString()))
-        prompt.setText(prefs.getString("prompt", prompt.text.toString()))
-        delay.setText(prefs.getInt("delay", 2).toString())
-        findViewById<Button>(R.id.enableAccess).setOnClickListener {
-            startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
-        }
-        findViewById<Button>(R.id.save).setOnClickListener {
-            prefs.edit().putBoolean("auto", auto.isChecked).putString("backend", backend.text.toString().trim()).putString("prompt", prompt.text.toString()).putInt("delay", delay.text.toString().toIntOrNull()?.coerceIn(0, 60) ?: 2).apply()
-        }
-    }
+import android.app.*;import android.content.*;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.graphics.Color;import android.widget.*;import okhttp3.*;import org.json.JSONObject
+class MainActivity:Activity(){
+ private lateinit var page:FrameLayout; private val p by lazy{getSharedPreferences("aria",0)}
+ override fun onCreate(b:Bundle?){super.onCreate(b);setContentView(R.layout.activity_main);page=findViewById(R.id.page);findViewById<Button>(R.id.navHome).setOnClickListener{home()};findViewById<Button>(R.id.navTest).setOnClickListener{test()};findViewById<Button>(R.id.navSettings).setOnClickListener{settings()};findViewById<Button>(R.id.navAbout).setOnClickListener{about()};home()}
+ private fun tv(s:String,size:Float=16f):TextView=TextView(this).apply{text=s;textSize=size;setTextColor(Color.WHITE);setPadding(8,12,8,12)}
+ private fun base(title:String):LinearLayout=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(24,24,24,12);setBackgroundColor(Color.rgb(7,17,13));addView(tv("ARIA",14f));addView(tv(title,28f))}
+ private fun show(l:LinearLayout){page.removeAllViews();page.addView(ScrollView(this).apply{addView(l)})}
+ private fun button(s:String,f:()->Unit)=Button(this).apply{text=s;setOnClickListener{f()}}
+ private fun home(){val l=base("Native Control Center");l.addView(tv("Background WhatsApp assistant"));l.addView(button("Notification Access"){startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))});l.addView(button("Battery Optimization"){battery()});l.addView(button("Auto-Launch / App Settings"){settingsIntent()});l.addView(tv("Auto Reply: "+if(p.getBoolean("auto",false))"ON" else"OFF",19f));l.addView(tv("Backend: "+p.getString("backend","https://wa-groq-server.onrender.com/webhook")));show(l)}
+ private fun test(){val l=base("System Test");l.addView(tv("Run each layer independently."));l.addView(button("Test Notification Access"){startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))});l.addView(button("Test Battery Optimization"){battery()});val s=EditText(this);s.hint="Sender";s.setText("TestUser");l.addView(s);val m=EditText(this);m.hint="Message";m.setText("Hi Aria, test notification");l.addView(m);l.addView(button("Simulate Notification"){AriaNotificationListener.lastTest="${s.text}: ${m.text}";Toast.makeText(this,"Notification test recorded",0).show()});val u=EditText(this);u.hint="Backend URL";u.setText(p.getString("backend","https://wa-groq-server.onrender.com/webhook"));l.addView(u);l.addView(button("Test API Call"){api(u.text.toString(),s.text.toString(),m.text.toString(),l)});l.addView(tv("Last captured: "+AriaNotificationListener.lastTest));show(l)}
+ private fun settings(){val l=base("Settings");val a=Switch(this);a.text="AUTO REPLY";a.isChecked=p.getBoolean("auto",false);l.addView(a);val u=EditText(this);u.hint="Backend URL";u.setText(p.getString("backend","https://wa-groq-server.onrender.com/webhook"));l.addView(u);val pr=EditText(this);pr.hint="Prompt";pr.setText(p.getString("prompt","Reply naturally and briefly."));l.addView(pr);val d=EditText(this);d.hint="Delay seconds";d.setText(p.getInt("delay",2).toString());d.inputType=2;l.addView(d);l.addView(button("Save"){p.edit().putBoolean("auto",a.isChecked).putString("backend",u.text.toString()).putString("prompt",pr.text.toString()).putInt("delay",d.text.toString().toIntOrNull()?:2).apply();Toast.makeText(this,"Saved",0).show()});l.addView(button("Battery Optimization"){battery()});l.addView(button("Auto-Launch / App Settings"){settingsIntent()});show(l)}
+ private fun about(){val l=base("About");l.addView(tv("Aria Reply",24f));l.addView(tv("Built for Krishna Tiwari — Class 12 PCM"));l.addView(tv("Notification → backend API → AI reply → WhatsApp Direct Reply when supported."));l.addView(tv("Incoming messages are untrusted content and cannot override Aria configuration."));show(l)}
+ private fun battery(){try{startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,Uri.parse("package:$packageName")))}catch(_:Exception){startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))}}
+ private fun settingsIntent(){startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$packageName")))}
+ private fun api(url:String,s:String,m:String,l:LinearLayout){Thread{try{val body=JSONObject().put("sender",s).put("message",m).toString().toRequestBody("application/json".toMediaType());val r=OkHttpClient().newCall(Request.Builder().url(url).post(body).build()).execute();val x="HTTP ${r.code}: ${r.body?.string()}";runOnUiThread{l.addView(tv(x,13f))}}catch(e:Exception){runOnUiThread{l.addView(tv("API ERROR: ${e.message}",13f))}}}.start()}
 }
