@@ -28,26 +28,11 @@ jobs:
       - name: Generate Gradle wrapper
         run: gradle wrapper --gradle-version 8.9 --distribution-type bin
 
-      - name: Verify release keystore
-        run: |
-          test -f keystore/aria-release.jks
-          keytool -list \
-            -keystore keystore/aria-release.jks \
-            -storepass "$ARIA_KEYSTORE_PASSWORD" \
-            -alias "$ARIA_KEY_ALIAS" >/dev/null
-        env:
-          ARIA_KEYSTORE_PASSWORD: 'M6sbMt7Y32asaB7lcH2zEhyV-6G1waw9'
-          ARIA_KEY_ALIAS: 'aria-release'
-
-      - name: Build signed release APK
-        env:
-          ARIA_KEYSTORE_PASSWORD: 'M6sbMt7Y32asaB7lcH2zEhyV-6G1waw9'
-          ARIA_KEY_ALIAS: 'aria-release'
-          ARIA_KEY_PASSWORD: 'M6sbMt7Y32asaB7lcH2zEhyV-6G1waw9'
+      - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: aria-reply-native-v11-release
+          name: aria-reply-native-v12-release
           path: aria-reply-native/app/build/outputs/apk/release/*.apk
