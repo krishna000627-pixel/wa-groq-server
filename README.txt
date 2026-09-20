@@ -1,13 +1,13 @@
-ARIA NATIVE-STYLE WEBVIEW UI V2
+ARIA Native UI — Reference Build
 
-Files:
-- wa_groq_server.py  backend + API + IST + 3-day context
-- dashboard.html      native-style responsive dashboard with bottom navigation
+dashboard.html is a mobile-first native-style WebView dashboard matching the supplied reference:
+- dark app bar
+- green Aria identity/status
+- Webhook card
+- AI Configuration card
+- prompt category selector
+- built-in anti-hallucination AI prompt
+- 3-day IST context controls
+- bottom navigation: Home / Contexts / Activity / Settings
 
-Deploy:
-python wa_groq_server.py
-
-Required Render environment variable:
-GROQ_API_KEY
-
-The WebView APK should point only to the Render root URL.
+Replace dashboard.html in the server project, then commit and push.
