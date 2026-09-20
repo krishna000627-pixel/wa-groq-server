@@ -1,0 +1,1 @@
+<notification-listener-service xmlns:android="http://schemas.android.com/apk/res/android" android:notificationListenerFilterTypes="conversations|alerting" android:accessDescription="@string/accessibility_description" />
