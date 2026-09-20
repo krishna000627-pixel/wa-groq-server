@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<title>Aria</title>
+<style>
+:root{
+  --bg:#080b10;--surface:#11161d;--surface2:#171d25;--line:#29313b;
+  --text:#f2f5f7;--muted:#8e99a6;--green:#25d366;--green2:#19b957;
+  --red:#ef4444;--amber:#f5b942;--radius:18px;
+}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);
+font-family:Inter,Roboto,"Segoe UI",system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;padding-bottom:88px}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.appbar{position:sticky;top:0;z-index:20;background:rgba(8,11,16,.94);
+backdrop-filter:blur(16px);border-bottom:1px solid var(--line);padding:
+calc(14px + env(safe-area-inset-top)) 18px 14px;display:flex;align-items:center;gap:12px}
+.avatar{width:42px;height:42px;border-radius:14px;background:var(--green);display:grid;place-items:center;
+font-size:22px;box-shadow:0 6px 20px rgba(37,211,102,.18)}
+.title{font-size:18px;font-weight:750}.subtitle{font-size:11px;color:var(--muted);margin-top:2px}
+.online{margin-left:auto;color:var(--green);font-size:12px;font-weight:650;display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+main{max-width:760px;margin:auto;padding:18px 14px 24px}
+.screen{display:none}.screen.active{display:block}
+.hero{padding:8px 4px 16px}.hero h1{margin:0;font-size:27px}.hero p{margin:6px 0 0;color:var(--muted);font-size:13px}
+.card{background:linear-gradient(145deg,var(--surface),#0f141b);border:1px solid var(--line);
+border-radius:var(--radius);padding:17px;margin:12px 0;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+.card-title{font-size:12px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:#a9b3be;margin-bottom:13px}
+.webhook{font-family:ui-monospace,SFMono-Regular,monospace;color:var(--green);font-size:12px;
+background:#0a0e13;border:1px solid var(--line);border-radius:12px;padding:12px;word-break:break-all}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{background:#0c1117;border:1px solid var(--line);
+border-radius:14px;padding:14px}.stat b{font-size:22px}.stat span{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.row{display:flex;gap:10px;align-items:center}.grow{flex:1}
+label{display:block;color:var(--muted);font-size:12px;margin:13px 0 6px}
+input,select,textarea{width:100%;border:1px solid var(--line);background:#0a0e13;color:var(--text);
+border-radius:12px;padding:12px;outline:none}input:focus,select:focus,textarea:focus{border-color:var(--green)}
+textarea{min-height:180px;resize:vertical;line-height:1.55}
+.btn{border:0;border-radius:12px;padding:11px 14px;font-weight:700}
+.primary{background:var(--green);color:#061009}.secondary{background:#202731;color:var(--text);border:1px solid var(--line)}
+.danger{background:transparent;color:#ff7373;border:1px solid #6b2525}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.badge{display:inline-flex;padding:5px 8px;border-radius:8px;background:#19211a;color:var(--green);font-size:10px;font-weight:700}
+.context{padding:13px;background:#0c1117;border:1px solid var(--line);border-radius:13px;margin:8px 0}
+.context .name{font-weight:750}.context .meta{font-size:11px;color:var(--muted);margin-top:5px}
+.log{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;line-height:1.6}
+.logitem{padding:10px 0;border-bottom:1px solid #20262e}.logitem:last-child{border:0}
+.sent{color:var(--green)}.skip{color:var(--amber)}.err{color:#ff6b6b}.time{color:var(--muted);margin-right:7px}
+.bottom{position:fixed;z-index:30;bottom:0;left:0;right:0;background:rgba(12,16,22,.96);
+backdrop-filter:blur(18px);border-top:1px solid var(--line);padding:7px 8px calc(7px + env(safe-area-inset-bottom));
+display:grid;grid-template-columns:repeat(4,1fr)}
+.nav{border:0;background:none;color:#7f8995;padding:6px 2px 3px;border-radius:12px;font-size:10px;font-weight:650}
+.nav .ico{display:block;font-size:19px;line-height:22px;margin-bottom:2px}.nav.active{color:var(--green);background:#132018}
+.toggle{display:flex;align-items:center;gap:10px;margin-top:14px}.switch{appearance:none;width:44px;height:25px;
+border-radius:20px;background:#303844;position:relative;padding:0;flex:none}.switch:before{content:"";position:absolute;
+width:19px;height:19px;top:3px;left:3px;background:white;border-radius:50%;transition:.2s}
+.switch:checked{background:var(--green)}.switch:checked:before{transform:translateX(19px)}
+.toast{position:fixed;z-index:50;left:50%;bottom:100px;transform:translateX(-50%);
+background:#eafdf1;color:#0a351b;padding:10px 15px;border-radius:12px;font-size:12px;font-weight:700;display:none}
+.small{font-size:11px;color:var(--muted);line-height:1.5}
+@media(min-width:700px){main{padding-left:20px;padding-right:20px}.bottom{max-width:760px;left:50%;right:auto;width:100%;transform:translateX(-50%);border-radius:18px 18px 0 0}}
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="avatar">⚡</div>
+  <div><div class="title">Aria</div><div class="subtitle">WhatsApp AI Assistant</div></div>
+  <div class="online"><span class="dot"></span>ONLINE</div>
+</header>
+
+<main>
+<section id="home" class="screen active">
+  <div class="hero"><h1>Control Center</h1><p>Manage Aria's AI behavior and WhatsApp automation.</p></div>
+  <div class="card"><div class="card-title">Connection</div><div class="webhook" id="webhook">Loading...</div></div>
+  <div class="card"><div class="card-title">System Status</div>
+    <div class="statgrid"><div class="stat"><b id="ctxCount">0</b><span>Active contexts</span></div>
+    <div class="stat"><b id="logCount">0</b><span>Recent events</span></div></div>
+  </div>
+  <div class="card"><div class="card-title">Quick Actions</div>
+    <div class="actions"><button class="btn primary" onclick="go('settings')">AI Settings</button>
+    <button class="btn secondary" onclick="runDebug()">Debug Groq</button></div>
+  </div>
+</section>
+
+<section id="contexts" class="screen">
+  <div class="hero"><h1>Contexts</h1><p>Per-person rolling conversation memory.</p></div>
+  <div class="card"><div class="row"><div class="card-title grow" style="margin:0">Active Contexts</div>
+    <span class="badge">3 DAYS</span></div><div id="contextsList">Loading...</div>
+    <div class="actions"><button class="btn danger" onclick="clearContexts()">Clear All Contexts</button></div>
+  </div>
+</section>
+
+<section id="activity" class="screen">
+  <div class="hero"><h1>Activity</h1><p>Recent Aria responses and system events.</p></div>
+  <div class="card"><div class="row"><div class="card-title grow" style="margin:0">Recent Activity</div>
+    <button class="btn secondary" onclick="clearLogs()">Clear</button></div>
+    <div id="logs" class="log">Loading...</div>
+  </div>
+</section>
+
+<section id="settings" class="screen">
+  <div class="hero"><h1>AI Configuration</h1><p>Identity, model, prompt and response behavior.</p></div>
+  <div class="card">
+    <div class="card-title">Groq</div>
+    <label>API Key</label><input id="apiKey" type="password" placeholder="GROQ_API_KEY">
+    <div class="small">Recommended: keep the key in the Render environment variable.</div>
+    <label>Model</label><select id="model">
+      <option>openai/gpt-oss-120b</option><option>openai/gpt-oss-20b</option>
+      <option>llama-3.3-70b-versatile</option><option>llama-3.1-8b-instant</option>
+    </select>
+  </div>
+  <div class="card">
+    <div class="card-title">Prompt Engine</div>
+    <label>Prompt Category</label>
+    <select id="category" onchange="applyCategory()">
+      <option value="default">Default AI Assistant</option>
+      <option value="professional">Professional Assistant</option>
+      <option value="casual">Casual AI Assistant</option>
+      <option value="concise">Concise Agent</option>
+    </select>
+    <label>System Prompt</label><textarea id="prompt"></textarea>
+    <div class="small">Built-in prompt is restored automatically when the selected category is applied.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Memory & Response</div>
+    <div class="row">
+      <div class="grow"><label>Context retention</label><input id="ctxDays" type="number" min="1" max="7" value="3"></div>
+      <div class="grow"><label>Max messages</label><input id="ctxMax" type="number" min="1" max="30" value="12"></div>
+    </div>
+    <div class="toggle"><input class="switch" id="enabled" type="checkbox" checked><span>Auto-reply enabled</span></div>
+    <div class="actions"><button class="btn primary" onclick="save()">Save Settings</button>
+    <button class="btn secondary" onclick="test()">Test Groq</button></div>
+  </div>
+</section>
+</main>
+
+<nav class="bottom">
+ <button class="nav active" data-screen="home" onclick="go('home')"><span class="ico">⌂</span>Home</button>
+ <button class="nav" data-screen="contexts" onclick="go('contexts')"><span class="ico">◉</span>Contexts</button>
+ <button class="nav" data-screen="activity" onclick="go('activity')"><span class="ico">≡</span>Activity</button>
+ <button class="nav" data-screen="settings" onclick="go('settings')"><span class="ico">⚙</span>Settings</button>
+</nav>
+<div id="toast" class="toast"></div>
+
+<script>
+const prompts={
+default:`You are Aria, Krishna's AI assistant managing his WhatsApp.
+
+IDENTITY
+- You are an AI assistant, not Krishna.
+- Never pretend to be Krishna or speak as if you personally are Krishna.
+- Never invent things Krishna said, did, owns, sent, promised, or decided.
+- Never claim to have access to Krishna's private information unless it is explicitly present in the supplied context.
+- If you do not know something, say you do not know.
+
+REAL-TIME
+- Use the supplied current IST time as the only source of current time.
+- Never guess the time, date, weekday, school status, location, or activity.
+- Do not expose internal timestamps unless they are genuinely useful to the conversation.
+
+MEMORY
+- Context is retained for up to 3 calendar days according to IST.
+- Use recent context when it is relevant.
+- If the previous interaction with a person is several hours old, treat the new message as a fresh interaction and use a brief natural AI-agent greeting before answering.
+- Never fabricate memories outside the supplied context.
+
+RESPONSE STYLE
+- Sound like a real AI assistant: natural, concise, clear and slightly human, but never impersonate Krishna.
+- Hinglish in, Hinglish out; English in, English out.
+- Match the user's energy without pretending to be the user.
+- Normally answer in 1-3 short lines.
+- Do not repeatedly introduce yourself.
+- Do not unnecessarily mention schedules.
+- Do not ask open-ended follow-up questions when a direct answer is possible.
+
+CLOSED-END BEHAVIOR
+- Prefer complete responses that naturally end the interaction.
+- Do not add "What else can I help with?", "Anything else?", "Tell me more", or similar engagement bait.
+- For requests to send/get something from Krishna, state that Krishna will handle/send it later if that is the available information; do not invent the item, subject, book, chapter, or delivery time.
+- If a message requires Krishna's personal action, clearly distinguish your role from his.
+
+SAFETY / ACCURACY
+- Do not hallucinate names, books, subjects, events, schedules, relationships, or actions.
+- If the message is ambiguous and a factual answer would require guessing, say what is known and keep the answer short.
+- Skip only blank messages, obvious forwards/spam, or media with no usable text.`,
+professional:`You are Aria, Krishna's AI assistant. You are an AI, never Krishna. Be precise, concise and professional. Never invent Krishna's actions or statements. Use only supplied context and current IST time. Keep replies to 1-3 short lines. Handle requests that require Krishna personally by saying Krishna will handle it later when that is known. Avoid open-ended follow-up questions and engagement bait.`,
+casual:`You are Aria, Krishna's AI assistant. You are an AI, never Krishna. Speak naturally and casually, using Hinglish when appropriate. Keep replies short and complete. Never invent Krishna's words, actions, plans or personal information. Use supplied context and IST time only. Avoid unnecessary follow-up questions.`,
+concise:`You are Aria, an AI assistant for Krishna. Never impersonate Krishna. Give the shortest accurate answer possible. Never hallucinate missing facts. Use supplied context and IST time only. End naturally without asking unnecessary follow-up questions.`
+};
+function go(id){
+ document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.id===id));
+ document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.screen===id));
+ window.scrollTo({top:0,behavior:'smooth'});
+}
+function toast(t){let x=document.getElementById('toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',1800)}
+async function get(url,opt){let r=await fetch(url,opt);return await r.json()}
+async function load(){
+ try{
+  let c=await get('/config');
+  document.getElementById('apiKey').value=c.groq_api_key||'';
+  document.getElementById('model').value=c.groq_model||'openai/gpt-oss-120b';
+  document.getElementById('prompt').value=c.system_prompt||prompts.default;
+  document.getElementById('ctxDays').value=Math.max(1,Math.round((c.context_window_minutes||4320)/1440));
+  document.getElementById('ctxMax').value=c.context_max_messages||12;
+  document.getElementById('enabled').checked=c.enabled!==false;
+  document.getElementById('webhook').textContent=location.origin+'/webhook';
+ }catch(e){}
+ refresh();
+}
+function applyCategory(){document.getElementById('prompt').value=prompts[document.getElementById('category').value]}
+async function save(){
+ let days=Math.max(1,parseInt(document.getElementById('ctxDays').value)||3);
+ let cfg={groq_api_key:document.getElementById('apiKey').value.trim(),groq_model:document.getElementById('model').value,
+ system_prompt:document.getElementById('prompt').value,context_window_minutes:days*1440,
+ context_max_messages:parseInt(document.getElementById('ctxMax').value)||12,enabled:document.getElementById('enabled').checked,
+ delay_min:8,delay_max:12};
+ await get('/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});toast('Settings saved')}
+async function refresh(){
+ try{
+  let c=await get('/contexts'), entries=Object.entries(c.contexts||{});
+  document.getElementById('ctxCount').textContent=entries.length;
+  document.getElementById('contextsList').innerHTML=entries.length?entries.map(([s,i])=>`<div class="context"><div class="name">${esc(s)}</div><div class="meta">${i.count} messages · last seen ${esc(i.last_seen)}</div></div>`).join(''):'<div class="small">No active contexts.</div>';
+  let l=await get('/logs');document.getElementById('logCount').textContent=(l.logs||[]).length;
+  document.getElementById('logs').innerHTML=(l.logs||[]).slice().reverse().map(x=>`<div class="logitem ${x.type}"><span class="time">${esc(x.time)}</span><b>${esc(x.sender)}</b>: ${esc(x.text)}</div>`).join('')||'<div class="small">No activity.</div>';
+ }catch(e){}
+}
+function esc(x){return String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+async function clearContexts(){await get('/contexts/clear',{method:'POST'});toast('Contexts cleared');refresh()}
+async function clearLogs(){await get('/logs/clear',{method:'POST'});toast('Activity cleared');refresh()}
+async function runDebug(){go('activity');let d=await get('/debug');toast(d.status===200?'Groq OK':'Groq error');console.log(d)}
+async function test(){let d=await get('/debug');toast(d.groq_raw?'Groq is responding':'Check Groq configuration')}
+load();setInterval(refresh,5000);
+</script>
+</body>
+</html>
