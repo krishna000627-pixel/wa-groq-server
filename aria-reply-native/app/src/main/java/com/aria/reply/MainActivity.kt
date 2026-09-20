@@ -15,7 +15,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.*
-import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import androidx.core.app.ActivityCompat
 
 class MainActivity : Activity() {
@@ -39,31 +39,55 @@ class MainActivity : Activity() {
         home()
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
     private fun text(value: String, size: Float = 16f, color: Int = white): TextView = TextView(this).apply {
-        this.text = value; textSize = size; setTextColor(color); setPadding(4, 10, 4, 10)
+        this.text = value
+        textSize = size
+        setTextColor(color)
+        includeFontPadding = true
+        setPadding(dp(4), dp(8), dp(4), dp(8))
     }
 
-    private fun title(value: String) = text(value, 30f).apply { typeface = Typeface.DEFAULT_BOLD; setPadding(0, 8, 0, 14) }
+    private fun title(value: String) = text(value, 30f).apply { typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(4), 0, dp(12)) }
 
     private fun card(label: String, value: String): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL; setPadding(18, 14, 18, 14); setBackgroundColor(surface)
-        addView(text(label.uppercase(), 11f, muted)); addView(text(value, 17f))
-        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 8, 0, 8) }
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(18), dp(14), dp(18), dp(14))
+        setBackgroundColor(surface)
+        addView(text(label.uppercase(), 11f, muted))
+        addView(text(value, 17f))
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(8), 0, dp(8)) }
     }
 
     private fun button(label: String, action: () -> Unit) = Button(this).apply {
-        text = label; setTextColor(white); setOnClickListener { action() }
-        layoutParams = LinearLayout.LayoutParams(-1, 52).apply { setMargins(0, 7, 0, 7) }
+        text = label
+        textSize = 14f
+        setTextColor(white)
+        isAllCaps = false
+        gravity = Gravity.CENTER
+        minHeight = 0
+        minimumHeight = 0
+        minWidth = 0
+        minimumWidth = 0
+        setPadding(dp(16), dp(8), dp(16), dp(8))
+        background = GradientDrawable().apply {
+            setColor(surface)
+            setStroke(dp(1), accent)
+            cornerRadius = dp(10).toFloat()
+        }
+        setOnClickListener { action() }
+        layoutParams = LinearLayout.LayoutParams(-1, dp(52)).apply { setMargins(0, dp(7), 0, dp(7)) }
     }
 
     private fun input(hint: String, value: String, password: Boolean = false): EditText = EditText(this).apply {
-        this.hint = hint; setText(value); setTextColor(white); setHintTextColor(muted); setSingleLine(false); setPadding(8, 8, 8, 8)
+        this.hint = hint; setText(value); setTextColor(white); setHintTextColor(muted); setSingleLine(false); setPadding(dp(8), dp(8), dp(8), dp(8))
         if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 4, 0, 10) }
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(4), 0, dp(10)) }
     }
 
     private fun base(screen: String): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL; setPadding(22, 22, 22, 12); setBackgroundColor(bg)
+        orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(22), dp(22), dp(12)); setBackgroundColor(bg)
         addView(text("ARIA", 13f, accent)); addView(title(screen))
     }
 

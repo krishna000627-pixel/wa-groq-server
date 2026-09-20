@@ -72,3 +72,17 @@ Use `tools/make-keystore.sh` in Termux. The script creates the JKS outside the G
 Aria can only reply through a notification action that exposes `RemoteInput`. If a WhatsApp version/device does not expose a reply action for a notification, Aria records the notification but cannot inject a reply into WhatsApp.
 
 The marker is ordinary message text. Aria cannot create a privileged/native WhatsApp badge or alter WhatsApp's internal UI.
+
+## V21 CI pipeline
+
+The release workflow restores and validates the signing keystore, injects the signing values into Gradle, runs `assembleRelease`, and uploads the APK directly. There is no redundant second `apksigner sign` step.
+
+The app's release build is signed by the Android Gradle Plugin when the signing environment variables are present. Signature verification can be performed separately when needed, but it is not required to produce the release artifact.
+
+## V21 UI/API fixes
+
+- Programmatic UI dimensions now use density-aware dp values, preventing clipped button labels on higher-density devices.
+- Action buttons use a consistent native dark/accent treatment and stable 52dp touch targets.
+- API tests now detect an empty API key before making a request.
+- HTTP 401 failures are surfaced as an explicit missing/rejected API-key error.
+- API keys remain encrypted through Android Keystore storage.
