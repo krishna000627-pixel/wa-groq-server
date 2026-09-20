@@ -1,5 +1,5 @@
 package com.aria.reply
-import android.app.*;import android.app.RemoteInput;import android.content.*;import android.os.*;import android.service.notification.*;import org.json.JSONObject;import okhttp3.*;import java.util.concurrent.Executors
+import android.app.*;import android.app.RemoteInput;import android.content.*;import android.os.*;import android.service.notification.*;import org.json.JSONObject;import okhttp3.*;import okhttp3.MediaType.Companion.toMediaType;import okhttp3.RequestBody.Companion.toRequestBody;import java.util.concurrent.Executors
 class AriaNotificationListener:NotificationListenerService(){
  companion object{var lastTest=""}
  private val ex=Executors.newSingleThreadExecutor();private val p by lazy{getSharedPreferences("aria",0)}

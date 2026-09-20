@@ -1,5 +1,5 @@
 package com.aria.reply
-import android.app.*;import android.content.*;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.graphics.Color;import android.widget.*;import okhttp3.*;import org.json.JSONObject
+import android.app.*;import android.content.*;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.graphics.Color;import android.widget.*;import okhttp3.*;import okhttp3.MediaType.Companion.toMediaType;import okhttp3.RequestBody.Companion.toRequestBody;import org.json.JSONObject
 class MainActivity:Activity(){
  private lateinit var page:FrameLayout; private val p by lazy{getSharedPreferences("aria",0)}
  override fun onCreate(b:Bundle?){super.onCreate(b);setContentView(R.layout.activity_main);page=findViewById(R.id.page);findViewById<Button>(R.id.navHome).setOnClickListener{home()};findViewById<Button>(R.id.navTest).setOnClickListener{test()};findViewById<Button>(R.id.navSettings).setOnClickListener{settings()};findViewById<Button>(R.id.navAbout).setOnClickListener{about()};home()}
