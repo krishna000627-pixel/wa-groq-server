@@ -8,6 +8,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: aria-reply-native
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,7 +31,10 @@ jobs:
       - name: Verify release keystore
         run: |
           test -f keystore/aria-release.jks
-          keytool -list -keystore keystore/aria-release.jks             -storepass "$ARIA_KEYSTORE_PASSWORD"             -alias "$ARIA_KEY_ALIAS" >/dev/null
+          keytool -list \
+            -keystore keystore/aria-release.jks \
+            -storepass "$ARIA_KEYSTORE_PASSWORD" \
+            -alias "$ARIA_KEY_ALIAS" >/dev/null
         env:
           ARIA_KEYSTORE_PASSWORD: 'M6sbMt7Y32asaB7lcH2zEhyV-6G1waw9'
           ARIA_KEY_ALIAS: 'aria-release'
@@ -38,7 +46,8 @@ jobs:
           ARIA_KEY_PASSWORD: 'M6sbMt7Y32asaB7lcH2zEhyV-6G1waw9'
         run: ./gradlew assembleRelease --no-daemon
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: aria-reply-native-v11-release
-          path: app/build/outputs/apk/release/*.apk
+          path: aria-reply-native/app/build/outputs/apk/release/*.apk
