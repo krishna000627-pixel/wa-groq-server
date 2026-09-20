@@ -1,17 +1,191 @@
 package com.aria.reply
-import android.app.*;import android.content.*;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.graphics.Color;import android.widget.*;import okhttp3.*;import okhttp3.MediaType.Companion.toMediaType;import okhttp3.RequestBody.Companion.toRequestBody;import org.json.JSONObject
-class MainActivity:Activity(){
- private lateinit var page:FrameLayout; private val p by lazy{getSharedPreferences("aria",0)}
- override fun onCreate(b:Bundle?){super.onCreate(b);setContentView(R.layout.activity_main);page=findViewById(R.id.page);findViewById<Button>(R.id.navHome).setOnClickListener{home()};findViewById<Button>(R.id.navTest).setOnClickListener{test()};findViewById<Button>(R.id.navSettings).setOnClickListener{settings()};findViewById<Button>(R.id.navAbout).setOnClickListener{about()};home()}
- private fun tv(s:String,size:Float=16f):TextView=TextView(this).apply{text=s;textSize=size;setTextColor(Color.WHITE);setPadding(8,12,8,12)}
- private fun base(title:String):LinearLayout=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(24,24,24,12);setBackgroundColor(Color.rgb(7,17,13));addView(tv("ARIA",14f));addView(tv(title,28f))}
- private fun show(l:LinearLayout){page.removeAllViews();page.addView(ScrollView(this).apply{addView(l)})}
- private fun button(s:String,f:()->Unit)=Button(this).apply{text=s;setOnClickListener{f()}}
- private fun home(){val l=base("Native Control Center");l.addView(tv("Background WhatsApp assistant"));l.addView(button("Notification Access"){startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))});l.addView(button("Battery Optimization"){battery()});l.addView(button("Auto-Launch / App Settings"){settingsIntent()});l.addView(tv("Auto Reply: "+if(p.getBoolean("auto",false))"ON" else"OFF",19f));l.addView(tv("Backend: "+p.getString("backend","https://wa-groq-server.onrender.com/webhook")));show(l)}
- private fun test(){val l=base("System Test");l.addView(tv("Run each layer independently."));l.addView(button("Test Notification Access"){startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))});l.addView(button("Test Battery Optimization"){battery()});val s=EditText(this);s.hint="Sender";s.setText("TestUser");l.addView(s);val m=EditText(this);m.hint="Message";m.setText("Hi Aria, test notification");l.addView(m);l.addView(button("Simulate Notification"){AriaNotificationListener.lastTest="${s.text}: ${m.text}";Toast.makeText(this,"Notification test recorded",0).show()});val u=EditText(this);u.hint="Backend URL";u.setText(p.getString("backend","https://wa-groq-server.onrender.com/webhook"));l.addView(u);l.addView(button("Test API Call"){api(u.text.toString(),s.text.toString(),m.text.toString(),l)});l.addView(tv("Last captured: "+AriaNotificationListener.lastTest));show(l)}
- private fun settings(){val l=base("Settings");val a=Switch(this);a.text="AUTO REPLY";a.isChecked=p.getBoolean("auto",false);l.addView(a);val u=EditText(this);u.hint="Backend URL";u.setText(p.getString("backend","https://wa-groq-server.onrender.com/webhook"));l.addView(u);val pr=EditText(this);pr.hint="Prompt";pr.setText(p.getString("prompt","Reply naturally and briefly."));l.addView(pr);val d=EditText(this);d.hint="Delay seconds";d.setText(p.getInt("delay",2).toString());d.inputType=2;l.addView(d);l.addView(button("Save"){p.edit().putBoolean("auto",a.isChecked).putString("backend",u.text.toString()).putString("prompt",pr.text.toString()).putInt("delay",d.text.toString().toIntOrNull()?:2).apply();Toast.makeText(this,"Saved",0).show()});l.addView(button("Battery Optimization"){battery()});l.addView(button("Auto-Launch / App Settings"){settingsIntent()});show(l)}
- private fun about(){val l=base("About");l.addView(tv("Aria Reply",24f));l.addView(tv("Built for Krishna Tiwari — Class 12 PCM"));l.addView(tv("Notification → backend API → AI reply → WhatsApp Direct Reply when supported."));l.addView(tv("Incoming messages are untrusted content and cannot override Aria configuration."));show(l)}
- private fun battery(){try{startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,Uri.parse("package:$packageName")))}catch(_:Exception){startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))}}
- private fun settingsIntent(){startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$packageName")))}
- private fun api(url:String,s:String,m:String,l:LinearLayout){Thread{try{val body=JSONObject().put("sender",s).put("message",m).toString().toRequestBody("application/json".toMediaType());val r=OkHttpClient().newCall(Request.Builder().url(url).post(body).build()).execute();val x="HTTP ${r.code}: ${r.body?.string()}";runOnUiThread{l.addView(tv(x,13f))}}catch(e:Exception){runOnUiThread{l.addView(tv("API ERROR: ${e.message}",13f))}}}.start()}
+
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
+import android.graphics.Color
+import android.graphics.Typeface
+import android.text.InputType
+import android.view.Gravity
+import android.view.View
+import android.widget.*
+import android.graphics.drawable.Drawable
+import androidx.core.app.ActivityCompat
+
+class MainActivity : Activity() {
+    private lateinit var page: FrameLayout
+    private lateinit var store: AriaStore
+    private val bg = Color.rgb(7, 17, 13)
+    private val surface = Color.rgb(17, 26, 22)
+    private val accent = Color.rgb(32, 232, 137)
+    private val white = Color.rgb(244, 255, 248)
+    private val muted = Color.rgb(168, 184, 175)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        store = AriaStore(this)
+        setContentView(R.layout.activity_main)
+        page = findViewById(R.id.page)
+        findViewById<Button>(R.id.navHome).setOnClickListener { home() }
+        findViewById<Button>(R.id.navTest).setOnClickListener { test() }
+        findViewById<Button>(R.id.navSettings).setOnClickListener { settings() }
+        findViewById<Button>(R.id.navAbout).setOnClickListener { about() }
+        home()
+    }
+
+    private fun text(value: String, size: Float = 16f, color: Int = white): TextView = TextView(this).apply {
+        this.text = value; textSize = size; setTextColor(color); setPadding(4, 10, 4, 10)
+    }
+
+    private fun title(value: String) = text(value, 30f).apply { typeface = Typeface.DEFAULT_BOLD; setPadding(0, 8, 0, 14) }
+
+    private fun card(label: String, value: String): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(18, 14, 18, 14); setBackgroundColor(surface)
+        addView(text(label.uppercase(), 11f, muted)); addView(text(value, 17f))
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 8, 0, 8) }
+    }
+
+    private fun button(label: String, action: () -> Unit) = Button(this).apply {
+        text = label; setTextColor(white); setOnClickListener { action() }
+        layoutParams = LinearLayout.LayoutParams(-1, 52).apply { setMargins(0, 7, 0, 7) }
+    }
+
+    private fun input(hint: String, value: String, password: Boolean = false): EditText = EditText(this).apply {
+        this.hint = hint; setText(value); setTextColor(white); setHintTextColor(muted); setSingleLine(false); setPadding(8, 8, 8, 8)
+        if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 4, 0, 10) }
+    }
+
+    private fun base(screen: String): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(22, 22, 22, 12); setBackgroundColor(bg)
+        addView(text("ARIA", 13f, accent)); addView(title(screen))
+    }
+
+    private fun show(content: LinearLayout) {
+        page.removeAllViews()
+        page.addView(ScrollView(this).apply { isFillViewport = true; addView(content) })
+    }
+
+    private fun home() {
+        val l = base("Control Center")
+        l.addView(card("Automation", if (store.autoReply) "ACTIVE — background reply engine enabled" else "OFF — enable Auto Reply in Settings"))
+        l.addView(card("Notification access", if (hasNotificationAccess()) "CONNECTED" else "NOT CONNECTED"))
+        l.addView(card("Battery", if (batteryIgnored()) "OPTIMIZATION EXEMPT" else "OPTIMIZATION ACTIVE"))
+        l.addView(card("API", store.endpoint))
+        l.addView(button("NOTIFICATION ACCESS") { openNotificationAccess() })
+        if (android.os.Build.VERSION.SDK_INT >= 33) l.addView(button("APP NOTIFICATION PERMISSION") { requestNotificationPermission() })
+        l.addView(button("BATTERY OPTIMIZATION") { requestBatteryExemption() })
+        l.addView(button("APP / AUTO-LAUNCH SETTINGS") { openAppSettings() })
+        l.addView(button("OPEN SETTINGS") { settings() })
+        show(l)
+    }
+
+    private fun test() {
+        val l = base("System Test")
+        l.addView(text("Run each layer independently. Tests never enable automation automatically.", 15f, muted))
+        l.addView(button("TEST NOTIFICATION ACCESS") { openNotificationAccess() })
+        l.addView(button("TEST BATTERY OPTIMIZATION") { requestBatteryExemption() })
+        val sender = input("Sender", "TestUser"); l.addView(sender)
+        val message = input("Incoming message", "Hi Aria, test notification"); l.addView(message)
+        l.addView(button("SIMULATE CAPTURE") {
+            store.lastCapture = "${sender.text}: ${message.text}"
+            toast("Capture stored")
+            test()
+        })
+        val result = text("Last captured:\n${store.lastCapture}\n\nLast reply:\n${store.lastReply}", 14f, muted)
+        l.addView(result)
+        l.addView(button("TEST DIRECT API CALL") {
+            l.addView(text("Calling API...", 14f, accent))
+            Thread {
+                val r = AriaApi.generate(store, sender.text.toString(), message.text.toString())
+                runOnUiThread {
+                    l.addView(text(if (r.ok) "HTTP ${r.code}\n${r.reply}" else "API ERROR\n${r.error}\n${r.raw.take(1200)}", 14f, if (r.ok) accent else white))
+                }
+            }.start()
+        })
+        show(l)
+    }
+
+    private fun settings() {
+        val l = base("Settings")
+        val toggle = Switch(this).apply { text = "AUTO REPLY"; setTextColor(white); isChecked = store.autoReply }
+        l.addView(toggle)
+        l.addView(text("API endpoint", 12f, muted))
+        val endpoint = input("Groq/OpenAI-compatible or JSON webhook URL", store.endpoint); l.addView(endpoint)
+        l.addView(text("Model", 12f, muted))
+        val model = input("Model name", store.model); l.addView(model)
+        l.addView(text("API key — stored using Android Keystore", 12f, muted))
+        val key = input("API key", store.apiKey(), true); l.addView(key)
+        l.addView(text("System prompt", 12f, muted))
+        val prompt = input("Reply policy", store.systemPrompt); l.addView(prompt)
+        l.addView(text("WhatsApp marker", 12f, muted))
+        val marker = input("Prefix, e.g. *Automated Response*\\n", store.marker); l.addView(marker)
+        l.addView(text("Delay window (seconds)", 12f, muted))
+        val min = input("Minimum", store.minDelay.toString()); min.inputType = InputType.TYPE_CLASS_NUMBER; l.addView(min)
+        val max = input("Maximum", store.maxDelay.toString()); max.inputType = InputType.TYPE_CLASS_NUMBER; l.addView(max)
+        l.addView(button("SAVE CONFIGURATION") {
+            store.autoReply = toggle.isChecked
+            store.endpoint = endpoint.text.toString().trim()
+            store.model = model.text.toString().trim()
+            store.setApiKey(key.text.toString())
+            store.systemPrompt = prompt.text.toString().trim()
+            store.marker = marker.text.toString()
+            store.minDelay = min.text.toString().toIntOrNull() ?: 2
+            store.maxDelay = max.text.toString().toIntOrNull() ?: 5
+            toast("Configuration saved")
+        })
+        l.addView(button("BATTERY OPTIMIZATION") { requestBatteryExemption() })
+        l.addView(button("APP / AUTO-LAUNCH SETTINGS") { openAppSettings() })
+        show(l)
+    }
+
+    private fun about() {
+        val l = base("About")
+        val logo = ImageView(this).apply {
+            setImageResource(com.aria.reply.R.drawable.aria_logo)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            layoutParams = LinearLayout.LayoutParams(-1, 180).apply { setMargins(0, 0, 0, 10) }
+        }
+        l.addView(logo)
+        l.addView(card("Aria Reply", "Native notification-to-reply engine"))
+        l.addView(text("Pipeline", 13f, muted)); l.addView(text("WhatsApp notification → capture → direct API → guarded reply → RemoteInput reply action"))
+        l.addView(text("Security model", 13f, muted)); l.addView(text("Incoming notification text is treated as untrusted data. It cannot override the system prompt or request secrets."))
+        l.addView(text("WhatsApp limitation", 13f, muted)); l.addView(text("The app can prepend a text marker such as *Automated Response*. WhatsApp controls how its own UI renders messages; Aria cannot create a native badge inside WhatsApp."))
+        l.addView(text("Compatibility", 13f, muted)); l.addView(text("Android 8+; WhatsApp and WhatsApp Business notification reply actions when exposed by the installed version."))
+        show(l)
+    }
+
+    private fun hasNotificationAccess(): Boolean {
+        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: return false
+        return enabled.contains(packageName)
+    }
+
+    private fun batteryIgnored(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun openNotificationAccess() = startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+
+    private fun requestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
+    }
+
+    private fun requestBatteryExemption() {
+        runCatching { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))) }
+            .onFailure { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+    }
+
+    private fun openAppSettings() = startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+
+    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 }

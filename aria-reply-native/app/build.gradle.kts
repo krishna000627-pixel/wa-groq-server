@@ -11,36 +11,38 @@ android {
         applicationId = "com.aria.reply"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "12.0"
-    }
-
-    signingConfigs {
-        create("release") {
-            val keystorePath = file("${rootProject.projectDir}/keystore/aria-release.jks")
-
-            storeFile = keystorePath
-            storePassword = System.getenv("ARIA_KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("ARIA_KEY_ALIAS")
-            keyPassword = System.getenv("ARIA_KEY_PASSWORD")
-        }
+        versionCode = 20
+        versionName = "20.0"
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    kotlinOptions { jvmTarget = "17" }
 
-    buildTypes {
-        getByName("release") {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+    signingConfigs {
+        create("release") {
+            val filePath = providers.environmentVariable("ARIA_KEYSTORE_FILE").orNull
+            val password = providers.environmentVariable("ARIA_KEYSTORE_PASSWORD").orNull
+            val alias = providers.environmentVariable("ARIA_KEY_ALIAS").orNull
+            val keyPassword = providers.environmentVariable("ARIA_KEY_PASSWORD").orNull
+            if (!filePath.isNullOrBlank() && !password.isNullOrBlank() && !alias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+                storeFile = file(filePath)
+                storePassword = password
+                keyAlias = alias
+                this.keyPassword = keyPassword
+            }
         }
     }
-}
 
-kotlin {
-    jvmToolchain(17)
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            val signing = signingConfigs.getByName("release")
+            if (signing.storeFile?.exists() == true) signingConfig = signing
+        }
+    }
 }
 
 dependencies {

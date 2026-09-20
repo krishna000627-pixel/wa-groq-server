@@ -1,0 +1,4 @@
+Embedded Aria visual assets:
+- aria_logo.png
+- aria_showcase.png
+- aria_concept.png

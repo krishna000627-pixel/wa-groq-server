@@ -1,7 +1,58 @@
 package com.aria.reply
-import android.app.*;import android.app.RemoteInput;import android.content.*;import android.os.*;import android.service.notification.*;import org.json.JSONObject;import okhttp3.*;import okhttp3.MediaType.Companion.toMediaType;import okhttp3.RequestBody.Companion.toRequestBody;import java.util.concurrent.Executors
-class AriaNotificationListener:NotificationListenerService(){
- companion object{var lastTest=""}
- private val ex=Executors.newSingleThreadExecutor();private val p by lazy{getSharedPreferences("aria",0)}
- override fun onNotificationPosted(sbn:StatusBarNotification){if(sbn.packageName!="com.whatsapp")return;val n=sbn.notification?:return;val s=n.extras.getString(Notification.EXTRA_TITLE)?:return;val m=n.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?:return;lastTest="$s: $m";if(!p.getBoolean("auto",false))return;val a=n.actions?.firstOrNull{it.remoteInputs?.isNotEmpty()==true}?:return;val i=a.remoteInputs!!.first();val u=p.getString("backend","https://wa-groq-server.onrender.com/webhook")?:return;ex.execute{try{val b=JSONObject().put("sender",s).put("message",m).toString().toRequestBody("application/json".toMediaType());val r=OkHttpClient().newCall(Request.Builder().url(u).post(b).build()).execute();val q=JSONObject(r.body?.string().orEmpty()).optJSONArray("replies")?.optJSONObject(0)?:return@execute;val reply=q.optString("message");if(reply.isBlank())return@execute;Thread.sleep((maxOf(p.getInt("delay",2),q.optInt("delay",0))*1000).toLong());val z=Bundle();z.putCharSequence(i.resultKey,reply);val inx=Intent();RemoteInput.addResultsToIntent(a.remoteInputs,inx,z);a.actionIntent.send(this,0,inx)}catch(_:Exception){}}}
+
+import android.app.RemoteInput
+import android.content.Intent
+import android.os.Bundle
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import java.util.concurrent.Executors
+import kotlin.random.Random
+
+class AriaNotificationListener : NotificationListenerService() {
+    private val executor = Executors.newSingleThreadExecutor()
+    private val seen = LinkedHashMap<String, Long>()
+    private lateinit var store: AriaStore
+
+    override fun onCreate() { super.onCreate(); store = AriaStore(this) }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val pkg = sbn.packageName
+        if (pkg != "com.whatsapp" && pkg != "com.whatsapp.w4b") return
+        val notification = sbn.notification ?: return
+        val extras = notification.extras
+        val title = extras.getString("android.title")?.trim().orEmpty()
+        val text = extras.getCharSequence("android.text")?.toString()?.trim().orEmpty()
+        if (title.isBlank() || text.isBlank()) return
+
+        val key = "${sbn.key}|$title|$text"
+        val now = System.currentTimeMillis()
+        synchronized(seen) {
+            if (seen[key]?.let { now - it < 12_000 } == true) return
+            seen[key] = now
+            if (seen.size > 100) seen.remove(seen.keys.first())
+        }
+        store.lastCapture = "$title: $text"
+        if (!store.autoReply) return
+
+        val action = notification.actions?.firstOrNull { action ->
+            action.remoteInputs?.any { it.allowFreeFormInput } == true
+        } ?: return
+        val remoteInput = action.remoteInputs?.firstOrNull() ?: return
+
+        executor.execute {
+            val result = AriaApi.generate(store, title, text)
+            if (!result.ok || result.reply.isBlank()) return@execute
+            val min = store.minDelay
+            val max = maxOf(store.maxDelay, min)
+            val delay = if (max == min) min else Random.nextInt(min, max + 1)
+            if (delay > 0) Thread.sleep(delay * 1000L)
+            val reply = store.marker + result.reply
+            val results = Bundle().apply { putCharSequence(remoteInput.resultKey, reply) }
+            val fillIn = Intent().apply { RemoteInput.addResultsToIntent(action.remoteInputs, this, results) }
+            runCatching { action.actionIntent.send(this, 0, fillIn) }
+            store.lastReply = reply
+        }
+    }
+
+    override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
 }

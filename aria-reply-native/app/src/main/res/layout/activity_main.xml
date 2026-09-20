@@ -1,1 +1,11 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:background="@color/aria_bg" android:layout_width="match_parent" android:layout_height="match_parent"><FrameLayout android:id="@+id/page" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/><LinearLayout android:orientation="horizontal" android:background="@color/aria_surface" android:layout_width="match_parent" android:layout_height="64dp"><Button android:id="@+id/navHome" android:text="HOME" android:layout_weight="1" android:layout_width="0dp" android:layout_height="match_parent"/><Button android:id="@+id/navTest" android:text="TEST" android:layout_weight="1" android:layout_width="0dp" android:layout_height="match_parent"/><Button android:id="@+id/navSettings" android:text="SETTINGS" android:layout_weight="1" android:layout_width="0dp" android:layout_height="match_parent"/><Button android:id="@+id/navAbout" android:text="ABOUT" android:layout_weight="1" android:layout_width="0dp" android:layout_height="match_parent"/></LinearLayout></LinearLayout>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/aria_bg">
+    <FrameLayout android:id="@+id/page" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="68dp" android:orientation="horizontal" android:background="@color/aria_surface">
+        <Button android:id="@+id/navHome" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="HOME" />
+        <Button android:id="@+id/navTest" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="TEST" />
+        <Button android:id="@+id/navSettings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="SETTINGS" />
+        <Button android:id="@+id/navAbout" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="ABOUT" />
+    </LinearLayout>
+</LinearLayout>
