@@ -55,7 +55,7 @@ jobs:
           ARIA_KEY_PASSWORD: ${{ secrets.ARIA_KEYSTORE_PASSWORD }}
         run: ./gradlew clean assembleRelease --no-daemon
 
-      - name: Sign release APK
+      - name: Diagnose and sign release APK
         shell: bash
         env:
           ARIA_KEYSTORE_PASSWORD: ${{ secrets.ARIA_KEYSTORE_PASSWORD }}
@@ -67,16 +67,31 @@ jobs:
           test -s "$APK"
           test -s "$KS"
 
+          echo "=== KEYSTORE FILE ==="
+          ls -lh "$KS"
+
+          echo "=== KEYSTORE PASSWORD TEST ==="
+          set +e
+          keytool -list             -keystore "$KS"             -storepass "$ARIA_KEYSTORE_PASSWORD"             -alias "$ARIA_KEY_ALIAS"
+          RC=$?
+          set -e
+
+          echo "KEYTOOL_EXIT_CODE=$RC"
+
+          if [ "$RC" -ne 0 ]; then
+            echo "KEYSTORE VALIDATION FAILED"
+            exit "$RC"
+          fi
+
+          echo "=== KEYSTORE VALID ==="
+
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
           test -x "$APKSIGNER"
 
-          echo "=== VERIFY KEYSTORE ==="
-          keytool -list             -keystore "$KS"             -storepass "$ARIA_KEYSTORE_PASSWORD"             -alias "$ARIA_KEY_ALIAS"
-
-          echo "=== SIGN APK ==="
+          echo "=== SIGNING APK ==="
           "$APKSIGNER" sign             --ks "$KS"             --ks-pass "env:ARIA_KEYSTORE_PASSWORD"             --ks-key-alias "$ARIA_KEY_ALIAS"             --key-pass "env:ARIA_KEYSTORE_PASSWORD"             "$APK"
 
-          echo "=== VERIFY APK ==="
+          echo "=== VERIFYING APK ==="
           "$APKSIGNER" verify --verbose --print-certs "$APK"
 
       - name: Sign release APK
