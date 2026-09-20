@@ -82,12 +82,16 @@ jobs:
 
           ./gradlew clean assembleRelease --no-daemon
 
-          APK="app/build/outputs/apk/release/app-release.apk"
+          echo "=== APK OUTPUTS ==="
+          find app/build/outputs -type f -name "*.apk" -print -exec ls -lh {} \;
 
+          APK=$(find app/build/outputs/apk -type f -name "*.apk" | head -1)
+
+          test -n "$APK"
           test -s "$APK"
 
-          echo "Release APK generated successfully."
-          ls -lh "$APK"
+          echo "Release APK generated successfully:"
+          echo "$APK"
 
       - name: Verify signed APK
         shell: bash
