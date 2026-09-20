@@ -1,25 +1,13 @@
-ARIA NATIVE UI V5
-==================
+ARIA UI V7
+Replace the existing dashboard.html with this file.
 
-Changes:
-- Native-style bottom navigation matching the supplied reference.
-- Settings is a clean list of bold white titles only.
-- Every Settings item opens its own page.
-- AI Configuration shows only API connected / API not connected; no API key is displayed.
-- Debug page tests the real /debug endpoint and reports connection status.
-- Test Assistant sends through the real /webhook endpoint.
-- Contexts includes TestUser preview.
-- Context detail shows received messages and Aria replies.
-- Backend now logs received messages as well as sent/skip/error events.
-- About page includes Krishna Tiwari, Class 12 PCM and Aria application details.
-- Inline SVG/CSS icons and the Home banner are embedded; no external image dependency.
-
-Termux:
-  cd ~/wa-groq-server
-  unzip -o ~/Downloads/aria_native_ui_v5.zip
-  git add dashboard.html wa_groq_server.py
-  git commit -m "feat: native Aria UI v5 with context detail and working debug"
-  git push
-
-Important:
-The ZIP contains the two replacement files only. Keep your existing wa_config.json and deployment files.
+Included:
+- Reference banner image embedded directly in dashboard.html
+- Mobile sizing aligned to the supplied reference
+- Separate page for every Settings item
+- Context detail showing received messages and Aria replies
+- Debug page showing only API connection status
+- No API key displayed in the UI
+- Detailed About page for Krishna Tiwari / Class 12 PCM
+- TestUser test/context preview
+- Settings list uses bold white titles only
