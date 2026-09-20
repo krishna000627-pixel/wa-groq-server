@@ -55,13 +55,14 @@ jobs:
           ARIA_KEY_PASSWORD: ${{ secrets.ARIA_KEY_PASSWORD }}
         run: ./gradlew clean assembleRelease --no-daemon
 
-      - name: Verify APK signature
+      - name: Verify signed APK
         shell: bash
         run: |
           APK="app/build/outputs/apk/release/app-release.apk"
-          test -f "$APK"
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
-          "$APKSIGNER" verify --verbose "$APK"
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
