@@ -70,6 +70,21 @@ jobs:
 
           "$APKSIGNER" sign             --ks keystore/aria-release.jks             --ks-pass env:ARIA_KEYSTORE_PASSWORD             --ks-key-alias "$ARIA_KEY_ALIAS"             --key-pass env:ARIA_KEY_PASSWORD             "$APK"
 
+      - name: Sign release APK
+        shell: bash
+        env:
+          ARIA_KEYSTORE_PASSWORD: ${{ secrets.ARIA_KEYSTORE_PASSWORD }}
+          ARIA_KEY_ALIAS: ${{ secrets.ARIA_KEY_ALIAS }}
+          ARIA_KEY_PASSWORD: ${{ secrets.ARIA_KEY_PASSWORD }}
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          test -x "$APKSIGNER"
+
+          "$APKSIGNER" sign             --ks keystore/aria-release.jks             --ks-pass env:ARIA_KEYSTORE_PASSWORD             --ks-key-alias "$ARIA_KEY_ALIAS"             --key-pass env:ARIA_KEY_PASSWORD             "$APK"
+
       - name: Verify signed APK
         shell: bash
         run: |
