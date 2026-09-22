@@ -14,8 +14,21 @@ android {
         versionName = "30.0"
     }
 
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("ARIA_KEYSTORE_FILE")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("ARIA_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ARIA_KEY_ALIAS")
+                keyPassword = System.getenv("ARIA_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
