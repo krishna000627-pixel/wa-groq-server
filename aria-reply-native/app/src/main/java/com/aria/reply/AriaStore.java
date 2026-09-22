@@ -13,6 +13,7 @@ public class AriaStore {
     public String get(String k, String d) { return p.getString(k, d); }
     public void bool(String k, boolean v) { p.edit().putBoolean(k, v).apply(); }
     public boolean bool(String k, boolean d) { return p.getBoolean(k, d); }
+    public void setBool(String k, boolean v) { p.edit().putBoolean(k, v).apply(); }
 
     public synchronized void addMessage(String contact, String role, String text) {
         try {

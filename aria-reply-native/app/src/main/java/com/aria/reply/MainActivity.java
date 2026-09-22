@@ -50,7 +50,7 @@ public class MainActivity extends Activity {
     void renderHome(){
         base("ARIA","WhatsApp response system • V30",0);
         LinearLayout hero=card();hero.addView(tv("SYSTEM STATUS",11));TextView st=tv(store.bool("auto_reply",false)?"● AUTO REPLY ACTIVE":"○ AUTO REPLY OFF",22);st.setTextColor(store.bool("auto_reply",false)?sage:terr);hero.addView(st);hero.addView(tv("Capture → Burst → Context → AI → Reply",13));body.addView(hero);
-        body.addView(btn("Auto Reply", "↯",v->{store.bool("auto_reply",!store.bool("auto_reply",false));render();}));
+        body.addView(btn("Auto Reply", "↯",v->{store.setBool("auto_reply",!store.bool("auto_reply",false));render();}));
         body.addView(btn("Chats & Context","▤",v->open("chats")));
         body.addView(btn("Pending Actions ("+store.pendingActions()+")","✓",v->open("tasks")));
         body.addView(btn("API Test Lab","◇",v->open("api")));
@@ -100,8 +100,8 @@ public class MainActivity extends Activity {
         body.addView(btn("Contacts Access","◎",v->{if(Build.VERSION.SDK_INT>=23)requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},CONTACTS);}));
         if(Build.VERSION.SDK_INT>=33) body.addView(btn("Post Notifications","▣",v->requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFS)));
         body.addView(btn("Battery Optimization","◌",v->batterySettings()));
-        body.addView(btn("Hide Raw WhatsApp Notifications: "+(store.bool("hide_raw",false)?"ON":"OFF"),"◈",v->{store.bool("hide_raw",!store.bool("hide_raw",false));render();}));
-        body.addView(btn("Auto Reply: "+(store.bool("auto_reply",false)?"ON":"OFF"),"↯",v->{store.bool("auto_reply",!store.bool("auto_reply",false));render();}));
+        body.addView(btn("Hide Raw WhatsApp Notifications: "+(store.bool("hide_raw",false)?"ON":"OFF"),"◈",v->{store.setBool("hide_raw",!store.bool("hide_raw",false));render();}));
+        body.addView(btn("Auto Reply: "+(store.bool("auto_reply",false)?"ON":"OFF"),"↯",v->{store.setBool("auto_reply",!store.bool("auto_reply",false));render();}));
     }
     void batterySettings(){try{startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:"+getPackageName())));}catch(Exception e){startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));}}
 

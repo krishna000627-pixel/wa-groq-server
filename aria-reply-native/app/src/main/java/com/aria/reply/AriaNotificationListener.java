@@ -123,9 +123,16 @@ public class AriaNotificationListener extends NotificationListenerService {
                 for (Notification.Action a : actions) {
                     if (a.getRemoteInputs() != null && a.getRemoteInputs().length > 0) {
                         Intent i = new Intent();
-                        RemoteInput.addResultsToIntent(a.getRemoteInputs(), i, new Bundle() {{
-                            putCharSequence(a.getRemoteInputs()[0].getResultKey(), reply);
-                        }});
+                        Bundle results = new Bundle();
+                        results.putCharSequence(
+                            a.getRemoteInputs()[0].getResultKey(),
+                            reply
+                        );
+                        RemoteInput.addResultsToIntent(
+                            a.getRemoteInputs(),
+                            i,
+                            results
+                        );
                         a.actionIntent.send(this, 0, i);
                         return;
                     }
