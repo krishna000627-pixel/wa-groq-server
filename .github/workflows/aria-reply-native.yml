@@ -1,4 +1,4 @@
-name: Build Aria Reply V22
+name: Build Aria Reply V21
 
 on:
   push:
@@ -62,7 +62,7 @@ jobs:
             --gradle-version 8.9 \
             --distribution-type bin
 
-      - name: Build signed release APK
+      - name: Build release APK
         shell: bash
         env:
           ARIA_KEYSTORE_FILE: ${{ github.workspace }}/aria-reply-native/keystore/aria-release.jks
@@ -72,33 +72,14 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew clean assembleRelease --no-daemon
-
-          echo "===== APK OUTPUTS ====="
-          find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print
-
-      - name: Locate release APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
-          test -n "$APK"
+          APK="app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
-          echo "APK=$APK" >> "$GITHUB_ENV"
-          echo "Release APK: $APK"
+          echo "Release APK generated successfully."
           ls -lh "$APK"
 
-      - name: Normalize APK name
-        shell: bash
-        run: |
-          set -euo pipefail
-          FINAL="app/build/outputs/apk/release/aria-reply-native-v22-signed.apk"
-          cp "$APK" "$FINAL"
-          test -s "$FINAL"
-          ls -lh "$FINAL"
-
-      - name: Upload signed APK
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: aria-reply-native-v22-signed
-          path: aria-reply-native/app/build/outputs/apk/release/aria-reply-native-v22-signed.apk
+          name: aria-reply-native-v21-signed
+          path: aria-reply-native/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
