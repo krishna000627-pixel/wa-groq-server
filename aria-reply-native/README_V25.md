@@ -1,54 +1,40 @@
-# Aria Reply V25 — Warm Clay Core
+# Aria Reply V26
 
-Native Android notification-to-AI reply engine with a redesigned warm-clay interface.
+Dark pastel clay redesign and context-aware API diagnostics.
 
-## UI redesign
-- Warm brown background instead of white.
-- Oat, cream, sage, terracotta, olive and dusty-aqua palette.
-- No elevation shadows.
-- No bento grid.
-- Rounded clay cards with restrained borders.
-- Icon-led navigation and action rows.
-- Large touch targets and explicit system state.
+## UI architecture
+- Command Center dashboard
+- Dedicated Diagnostics page
+- Dedicated Chats / Context page
+- Chat detail viewer
+- Dedicated API Test Lab with sender + message input
+- Settings with persistent provider state
+- System page with architecture and feature inventory
+- Five-item bottom navigation
+- Dark cocoa background, mocha surfaces, sage/teal active states, terracotta warnings
+- XML/vector icons; no white canvas, bento grid, or elevation shadows
 
-## V25 features
-1. Warm Clay visual system
-2. Icon-led bottom navigation
-3. Auto Reply state and switch
-4. Groq provider
-5. Gemini provider
-6. Groq endpoint/model controls
-7. Gemini model controls
-8. Android Keystore encrypted API keys
-9. Notification access status
-10. Battery optimization status
-11. RemoteInput target persistence
-12. Synthetic Aria notification capture
-13. Synthetic AI reply loop
-14. Direct RemoteInput diagnostics
-15. API-only diagnostics
-16. Local activity log
-17. Clear activity log
-18. Save-all configuration
-19. System prompt reset
-20. Runtime/API error surface
-21. Response marker control
-22. Minimum/maximum reply delay
-23. Last capture dashboard state
-24. Last reply dashboard state
-25. Provider/model readiness state
+## AI
+- Groq and Gemini providers
+- Groq default model: `openai/gpt-oss-120b`
+- Groq endpoint: `https://api.groq.com/openai/v1/chat/completions`
+- Gemini API support
+- API keys encrypted with Android Keystore
+- Dedicated manual API Test Lab
+- Detailed HTTP/error-body diagnostics
 
-## Test flow
-1. Grant Notification Access.
-2. Grant notification permission on Android 13+.
-3. Configure the active provider and save.
-4. Open Diagnostics.
-5. Run **POST ARIA SYNTHETIC MESSAGE**.
-6. Aria's notification listener captures the synthetic notification.
-7. The listener detects the real RemoteInput action.
-8. The active AI provider generates the reply.
-9. The reply is sent through RemoteInput.
-10. The test receiver records the returned reply.
+## Context
+- Captures sender/message pairs from WhatsApp notifications and synthetic tests
+- Stores up to 200 local message records
+- Shows conversations and full local chat detail
+- Sends the latest 10 messages for the same sender as conversational context to the AI engine
+- Context is never sent when the test is run without context selection
 
-## Build
-The repository workflow uses Java 17 and Gradle 8.9 and uploads the release APK as an artifact.
+## Automation
+- Notification capture
+- RemoteInput detection
+- Synthetic Aria notification with real RemoteInput action
+- AI generation
+- Delayed reply delivery
+- Direct RemoteInput test
+- Event log and runtime diagnostics

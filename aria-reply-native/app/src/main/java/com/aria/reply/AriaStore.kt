@@ -3,13 +3,13 @@ package com.aria.reply
 import android.content.Context
 import android.util.Base64
 import java.nio.charset.StandardCharsets
-import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.SecretKey
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import java.util.UUID
 
 class AriaStore(context: Context) {
     private val prefs = context.getSharedPreferences("aria", Context.MODE_PRIVATE)
@@ -19,7 +19,7 @@ class AriaStore(context: Context) {
     var autoReply: Boolean get() = prefs.getBoolean("auto", false); set(v) = prefs.edit().putBoolean("auto", v).apply()
     var provider: String get() = prefs.getString("provider", "GROQ") ?: "GROQ"; set(v) = prefs.edit().putString("provider", v).apply()
     var endpoint: String get() = prefs.getString("endpoint", DEFAULT_ENDPOINT) ?: DEFAULT_ENDPOINT; set(v) = prefs.edit().putString("endpoint", v).apply()
-    var model: String get() = prefs.getString("model", "llama-3.3-70b-versatile") ?: "llama-3.3-70b-versatile"; set(v) = prefs.edit().putString("model", v).apply()
+    var model: String get() = prefs.getString("model", "openai/gpt-oss-120b") ?: "openai/gpt-oss-120b"; set(v) = prefs.edit().putString("model", v).apply()
     var geminiModel: String get() = prefs.getString("geminiModel", "gemini-2.5-flash") ?: "gemini-2.5-flash"; set(v) = prefs.edit().putString("geminiModel", v).apply()
     var systemPrompt: String get() = prefs.getString("prompt", DEFAULT_PROMPT) ?: DEFAULT_PROMPT; set(v) = prefs.edit().putString("prompt", v).apply()
     var marker: String get() = prefs.getString("marker", "*Automated Response*\n") ?: ""; set(v) = prefs.edit().putString("marker", v).apply()
@@ -63,6 +63,46 @@ class AriaStore(context: Context) {
         }.getOrDefault("")
     }
 
+    fun addConversationMessage(sender: String, role: String, text: String) {
+        val cleanSender = sender.trim().ifBlank { "Unknown" }
+        val cleanText = text.trim()
+        if (cleanText.isBlank()) return
+        val line = "${System.currentTimeMillis()}|${escape(cleanSender)}|$role|${escape(cleanText)}"
+        val existing = prefs.getStringSet("chat_history", emptySet<String>())?.toMutableSet() ?: mutableSetOf<String>()
+        existing.add("${UUID.randomUUID()}::$line")
+        val sorted = existing.toList().sortedByDescending { it.substringAfter("::").substringBefore('|').toLongOrNull() ?: 0L }.take(200)
+        prefs.edit().putStringSet("chat_history", sorted.toSet()).apply()
+    }
+
+    data class ChatMessage(val timestamp: Long, val sender: String, val role: String, val text: String)
+
+    fun conversations(): List<String> = history().map { it.sender }.distinct()
+
+    fun history(sender: String? = null): List<ChatMessage> = prefs.getStringSet("chat_history", emptySet())?.mapNotNull { raw ->
+        val line = raw.substringAfter("::", raw)
+        val parts = line.split('|', limit = 4)
+        if (parts.size < 4) null else ChatMessage(
+            parts[0].toLongOrNull() ?: 0L,
+            unescape(parts[1]),
+            parts[2],
+            unescape(parts[3])
+        )
+    }?.filter { sender == null || it.sender == sender }?.sortedBy { it.timestamp }.orEmpty()
+
+    fun recentContext(sender: String, limit: Int = 10): List<ChatMessage> = history(sender).takeLast(limit)
+
+    fun clearConversation(sender: String) {
+        val keep = prefs.getStringSet("chat_history", emptySet()).orEmpty().filter { raw ->
+            val line = raw.substringAfter("::", raw)
+            val parts = line.split('|', limit = 4)
+            parts.size < 4 || unescape(parts[1]) != sender
+        }.toSet()
+        prefs.edit().putStringSet("chat_history", keep).apply()
+    }
+
+    private fun escape(v: String) = v.replace("\\", "\\\\").replace("|", "\\p").replace("\n", "\\n")
+    private fun unescape(v: String) = v.replace("\\n", "\n").replace("\\p", "|").replace("\\\\", "\\")
+
     fun logEvent(message: String, success: Boolean? = null) {
         val existing = prefs.getStringSet("events", emptySet())?.toList().orEmpty()
         val prefix = when (success) { true -> "OK"; false -> "FAIL"; null -> "INFO" }
@@ -74,7 +114,7 @@ class AriaStore(context: Context) {
     fun clearEvents() { prefs.edit().remove("events").apply() }
 
     private fun getOrCreateKey(alias: String): SecretKey {
-        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(alias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         generator.init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)

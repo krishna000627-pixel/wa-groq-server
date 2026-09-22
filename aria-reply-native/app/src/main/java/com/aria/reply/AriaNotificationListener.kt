@@ -35,6 +35,7 @@ class AriaNotificationListener : NotificationListenerService() {
         }
 
         store.lastCapture = "$title: $text"
+        store.addConversationMessage(title, "user", text)
         store.logEvent("Captured ${if (synthetic) "synthetic" else "WhatsApp"} notification from $title", null)
 
         val action = notification.actions?.firstOrNull { a -> a.remoteInputs?.any { it.allowFreeFormInput } == true }
@@ -59,7 +60,7 @@ class AriaNotificationListener : NotificationListenerService() {
         if (!store.autoReply && !synthetic) return
 
         executor.execute {
-            val result = AriaApi.generate(store, title, text)
+            val result = AriaApi.generate(store, title, text, store.recentContext(title).dropLast(1))
             if (!result.ok || result.reply.isBlank()) {
                 store.lastError = "${result.error} (HTTP ${result.code})"
                 store.logEvent("AI generation failed: HTTP ${result.code}", false)
@@ -75,6 +76,7 @@ class AriaNotificationListener : NotificationListenerService() {
             val sent = runCatching { action.actionIntent.send(this, 0, fillIn); true }.getOrDefault(false)
             if (sent) {
                 store.lastReply = reply
+                store.addConversationMessage(title, "assistant", reply)
                 store.lastError = ""
                 store.logEvent("Reply delivered through RemoteInput", true)
             } else {

@@ -17,25 +17,29 @@ import android.view.Gravity
 import android.view.View
 import android.widget.*
 import androidx.core.app.ActivityCompat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : Activity() {
     private lateinit var page: FrameLayout
     private lateinit var store: AriaStore
     private var screen = 0
+    private var selectedChat = ""
 
-    // Warm Clay palette: no white background, no elevation/shadow, no bento grid.
-    private val bg = Color.rgb(232, 215, 197)          // warm brown
-    private val surface = Color.rgb(246, 235, 221)     // oat
-    private val cream = Color.rgb(251, 243, 232)       // cream
-    private val sage = Color.rgb(216, 226, 209)        // sage
-    private val clay = Color.rgb(231, 182, 160)        // terracotta
-    private val olive = Color.rgb(202, 204, 165)       // muted olive
-    private val sky = Color.rgb(202, 218, 214)         // dusty aqua
-    private val ink = Color.rgb(58, 42, 34)            // dark cocoa
-    private val muted = Color.rgb(119, 101, 90)
-    private val accent = Color.rgb(91, 119, 94)        // eucalyptus
-    private val danger = Color.rgb(160, 79, 70)
-    private val border = Color.rgb(207, 185, 163)
+    // Dark pastel clay system: cocoa base + sage/teal/terracotta accents.
+    private val bg = Color.rgb(42, 29, 24)
+    private val surface = Color.rgb(52, 37, 31)
+    private val surface2 = Color.rgb(61, 43, 36)
+    private val cream = Color.rgb(243, 228, 208)
+    private val muted = Color.rgb(185, 162, 147)
+    private val sage = Color.rgb(143, 175, 143)
+    private val teal = Color.rgb(110, 169, 160)
+    private val terracotta = Color.rgb(196, 126, 99)
+    private val gold = Color.rgb(200, 165, 106)
+    private val ink = Color.rgb(249, 237, 220)
+    private val danger = Color.rgb(208, 106, 91)
+    private val border = Color.rgb(89, 65, 56)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,379 +48,286 @@ class MainActivity : Activity() {
         page = findViewById(R.id.page)
         findViewById<View>(R.id.navHome).setOnClickListener { screen = 0; render() }
         findViewById<View>(R.id.navTest).setOnClickListener { screen = 1; render() }
-        findViewById<View>(R.id.navSettings).setOnClickListener { screen = 2; render() }
-        findViewById<View>(R.id.navAbout).setOnClickListener { screen = 3; render() }
+        findViewById<View>(R.id.navChats).setOnClickListener { screen = 2; render() }
+        findViewById<View>(R.id.navSettings).setOnClickListener { screen = 3; render() }
+        findViewById<View>(R.id.navSystem).setOnClickListener { screen = 4; render() }
         render()
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (::page.isInitialized) render()
-    }
-
+    override fun onResume() { super.onResume(); if (::page.isInitialized) render() }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun tv(text: String, size: Float = 15f, color: Int = ink) = TextView(this).apply {
-        this.text = text
-        textSize = size
-        setTextColor(color)
-        includeFontPadding = true
+        this.text = text; textSize = size; setTextColor(color); includeFontPadding = true
     }
 
-    private fun bg(color: Int, radius: Int = 18, stroke: Int = border, strokeWidth: Int = 1) =
-        GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = dp(radius).toFloat()
-            if (strokeWidth > 0) setStroke(dp(strokeWidth), stroke)
+    private fun shape(color: Int, radius: Int = 16, stroke: Int = border, width: Int = 1) = GradientDrawable().apply {
+        setColor(color); cornerRadius = dp(radius).toFloat(); if (width > 0) setStroke(dp(width), stroke)
+    }
+
+    private fun icon(res: Int, tint: Int = cream, size: Int = 22) = ImageView(this).apply {
+        setImageResource(res); setColorFilter(tint); layoutParams = LinearLayout.LayoutParams(dp(size), dp(size))
+    }
+
+    private fun shell(title: String, subtitle: String, back: (() -> Unit)? = null): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(17), dp(18), dp(24)); setBackgroundColor(bg)
+        val top = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
+        if (back != null) {
+            top.addView(iconButton(R.drawable.ic_back, "Back") { back() }, LinearLayout.LayoutParams(dp(44), dp(44)))
+            top.addView(Space(this@MainActivity), LinearLayout.LayoutParams(dp(8), 1))
         }
-
-    private fun shell(title: String, subtitle: String): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(20), dp(18), dp(20), dp(24))
-        setBackgroundColor(bg)
-        addView(tv("ARIA / REPLY", 12f, accent).apply {
-            typeface = Typeface.DEFAULT_BOLD
-            letterSpacing = 0.12f
-        })
-        addView(tv(title, 29f, ink).apply {
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(5), 0, 0)
-        })
-        addView(tv(subtitle, 14f, muted).apply { setPadding(0, dp(2), 0, dp(14)) })
+        top.addView(tv("ARIA / REPLY", 11f, sage).apply { typeface = Typeface.DEFAULT_BOLD; letterSpacing = .16f }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(top)
+        addView(tv(title, 30f, ink).apply { typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(5), 0, 0) })
+        addView(tv(subtitle, 14f, muted).apply { setPadding(0, dp(3), 0, dp(12)) })
     }
 
-    private fun icon(resource: Int, tint: Int = ink, size: Int = 24): ImageView = ImageView(this).apply {
-        setImageResource(resource)
-        setColorFilter(tint)
-        layoutParams = LinearLayout.LayoutParams(dp(size), dp(size))
+    private fun iconButton(res: Int, content: String, action: () -> Unit) = ImageButton(this).apply {
+        contentDescription = content; setImageResource(res); setColorFilter(ink); background = shape(surface2, 14); setPadding(dp(10), dp(10), dp(10), dp(10)); setOnClickListener { action() }
     }
 
-    private fun card(
-        title: String,
-        value: String,
-        color: Int,
-        iconRes: Int,
-        action: (() -> Unit)? = null
-    ): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(17), dp(15), dp(17), dp(15))
-        background = bg(color, 20)
+    private fun statusPill(text: String, ok: Boolean): TextView = tv(text.uppercase(), 10f, if (ok) sage else terracotta).apply {
+        typeface = Typeface.DEFAULT_BOLD; setPadding(dp(10), dp(5), dp(10), dp(5)); background = shape(if (ok) Color.rgb(48, 66, 50) else Color.rgb(73, 44, 37), 12, if (ok) Color.rgb(72, 103, 73) else Color.rgb(118, 64, 52))
+    }
+
+    private fun panel(title: String, value: String, color: Int, res: Int, action: (() -> Unit)? = null): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(dp(15), dp(14), dp(15), dp(14)); background = shape(color, 18)
         layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(5), 0, dp(5)) }
-        addView(LinearLayout(this@MainActivity).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            addView(icon(iconRes, accent, 25).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(25), dp(25)).apply { setMargins(0, 0, dp(11), 0) }
-            })
-            addView(tv(title.uppercase(), 11f, muted).apply { typeface = Typeface.DEFAULT_BOLD }, LinearLayout.LayoutParams(0, -2, 1f))
-            if (action != null) addView(tv("OPEN", 10f, accent).apply { typeface = Typeface.DEFAULT_BOLD })
-        })
-        addView(tv(value, 16f, ink).apply { setPadding(0, dp(8), 0, 0) })
+        val head = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
+        head.addView(icon(res, sage, 23), LinearLayout.LayoutParams(dp(23), dp(23)).apply { setMargins(0, 0, dp(10), 0) })
+        head.addView(tv(title.uppercase(), 10f, muted).apply { typeface = Typeface.DEFAULT_BOLD; letterSpacing = .08f }, LinearLayout.LayoutParams(0, -2, 1f))
+        if (action != null) head.addView(tv("OPEN", 9f, sage).apply { typeface = Typeface.DEFAULT_BOLD })
+        addView(head)
+        addView(tv(value, 15f, ink).apply { setPadding(0, dp(8), 0, 0) })
         if (action != null) setOnClickListener { action() }
     }
 
-    private fun actionButton(label: String, iconRes: Int, color: Int, action: () -> Unit) =
-        LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            background = bg(color, 17)
-            layoutParams = LinearLayout.LayoutParams(-1, dp(55)).apply { setMargins(0, dp(4), 0, dp(4)) }
-            addView(icon(iconRes, accent, 23).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(23), dp(23)).apply { setMargins(0, 0, dp(12), 0) }
-            })
-            addView(tv(label, 14f, ink).apply { typeface = Typeface.DEFAULT_BOLD })
-            setOnClickListener { action() }
-        }
-
-    private fun section(title: String, detail: String = "") = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(0, dp(15), 0, dp(4))
-        addView(tv(title.uppercase(), 11f, accent).apply { typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.08f })
-        if (detail.isNotBlank()) addView(tv(detail, 12f, muted).apply { setPadding(0, dp(2), 0, 0) })
+    private fun action(label: String, res: Int, color: Int, action: () -> Unit): LinearLayout = LinearLayout(this).apply {
+        gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(11), dp(14), dp(11)); background = shape(color, 14)
+        layoutParams = LinearLayout.LayoutParams(-1, dp(54)).apply { setMargins(0, dp(4), 0, dp(4)) }
+        addView(icon(res, sage, 21), LinearLayout.LayoutParams(dp(21), dp(21)).apply { setMargins(0, 0, dp(12), 0) })
+        addView(tv(label, 13f, ink).apply { typeface = Typeface.DEFAULT_BOLD }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(icon(R.drawable.ic_chevron, muted, 18)); setOnClickListener { action() }
     }
 
-    private fun input(label: String, value: String, password: Boolean = false, multiline: Boolean = false) =
-        EditText(this).apply {
-            hint = label
-            setText(value)
-            setTextColor(ink)
-            setHintTextColor(muted)
-            textSize = 14f
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            background = bg(cream, 15)
-            isSingleLine = !multiline
-            if (multiline) minLines = 4
-            if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            layoutParams = LinearLayout.LayoutParams(-1, if (multiline) dp(126) else dp(52)).apply {
-                setMargins(0, dp(4), 0, dp(7))
-            }
-        }
-
-    private fun show(content: LinearLayout) {
-        page.removeAllViews()
-        page.addView(ScrollView(this).apply {
-            isFillViewport = true
-            addView(content)
-        })
+    private fun section(title: String, subtitle: String = "") = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(0, dp(15), 0, dp(4))
+        addView(tv(title.uppercase(), 10f, sage).apply { typeface = Typeface.DEFAULT_BOLD; letterSpacing = .1f })
+        if (subtitle.isNotBlank()) addView(tv(subtitle, 12f, muted).apply { setPadding(0, dp(3), 0, 0) })
     }
 
-    private fun ready(ok: Boolean) = if (ok) "READY" else "ACTION REQUIRED"
-
-    private fun render() {
-        when (screen) {
-            0 -> home()
-            1 -> test()
-            2 -> settings()
-            else -> about()
-        }
+    private fun field(label: String, value: String, password: Boolean = false, multiline: Boolean = false): EditText = EditText(this).apply {
+        hint = label; setText(value); setTextColor(ink); setHintTextColor(muted); textSize = 14f; setPadding(dp(14), dp(8), dp(14), dp(8)); background = shape(surface2, 14)
+        isSingleLine = !multiline; if (multiline) minLines = 5
+        if (password) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        layoutParams = LinearLayout.LayoutParams(-1, if (multiline) dp(140) else dp(52)).apply { setMargins(0, dp(4), 0, dp(7)) }
     }
+
+    private fun show(content: LinearLayout) { page.removeAllViews(); page.addView(ScrollView(this).apply { isFillViewport = true; addView(content) }) }
+
+    private fun render() = when (screen) { 0 -> home(); 1 -> diagnostics(); 2 -> chats(); 3 -> settings(); 4 -> system(); 5 -> chatDetail(); 6 -> apiTest() ; else -> home() }
 
     private fun home() {
-        val l = shell("Control Center", "Notification → AI → RemoteInput reply, with one clear system state.")
+        val l = shell("Command Center", "Aria's live notification → context → AI → reply pipeline.")
+        val ready = store.autoReply && store.hasApiKey() && hasNotificationAccess()
+        val hero = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(17), dp(17), dp(17), dp(17)); background = shape(if (ready) Color.rgb(49, 67, 51) else Color.rgb(67, 46, 39), 20) }
+        val h = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
+        h.addView(tv("AUTOMATION ENGINE", 11f, muted).apply { typeface = Typeface.DEFAULT_BOLD; letterSpacing = .08f }, LinearLayout.LayoutParams(0, -2, 1f))
+        h.addView(statusPill(if (store.autoReply) "Armed" else "Manual", ready))
+        hero.addView(h)
+        hero.addView(tv(if (ready) "Ready to process WhatsApp replies." else "Configure the active provider and Notification Access.", 18f, ink).apply { typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(12), 0, dp(4)) })
+        hero.addView(tv("${store.provider.uppercase()}  •  ${activeModel()}", 12f, muted))
+        l.addView(hero)
 
-        val automationReady = store.autoReply && store.hasApiKey() && hasNotificationAccess()
-        l.addView(card(
-            "Automation",
-            if (store.autoReply) "ON  •  ${if (automationReady) "ready to process WhatsApp" else "needs one or more prerequisites"}" else "OFF  •  engine is idle",
-            if (automationReady) sage else clay,
-            R.drawable.ic_bolt
-        ) { screen = 2; render() })
+        l.addView(section("Pipeline"))
+        val steps = listOf("Notification capture" to hasNotificationAccess(), "Conversation context" to store.conversations().isNotEmpty(), "${store.provider.uppercase()} generation" to store.hasApiKey(), "RemoteInput reply" to store.lastTargetReady)
+        steps.forEachIndexed { i, pair ->
+            val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(13), dp(10), dp(13), dp(10)); background = shape(surface, 13); layoutParams = LinearLayout.LayoutParams(-1, dp(47)).apply { setMargins(0, dp(3), 0, dp(3)) } }
+            row.addView(tv(if (pair.second) "●" else "○", 16f, if (pair.second) sage else muted).apply { layoutParams = LinearLayout.LayoutParams(dp(28), -2) })
+            row.addView(tv("0${i+1}  ${pair.first}", 13f, ink), LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(statusPill(if (pair.second) "Ready" else "Wait", pair.second))
+            l.addView(row)
+        }
 
-        l.addView(card(
-            "AI engine",
-            "${store.provider.uppercase()}  •  ${activeModel()}  •  ${ready(store.hasApiKey())}",
-            olive,
-            R.drawable.ic_key
-        ) { screen = 2; render() })
+        l.addView(section("Latest signal"))
+        l.addView(panel("Captured", store.lastCapture, surface, R.drawable.ic_bell) { screen = 2; render() })
+        l.addView(panel("Last reply", store.lastReply, Color.rgb(48, 66, 50), R.drawable.ic_reply))
+        if (store.lastError.isNotBlank()) l.addView(panel("Latest error", store.lastError, Color.rgb(73, 44, 37), R.drawable.ic_warning) { screen = 6; render() })
 
-        l.addView(card(
-            "Notification reader",
-            if (hasNotificationAccess()) "CONNECTED  •  notification listener is active" else "NOT CONNECTED  •  permission required",
-            if (hasNotificationAccess()) sky else clay,
-            R.drawable.ic_bell
-        ) { openNotificationAccess() })
-
-        l.addView(section("System pipeline", "Each layer is independently visible; no hidden automation."))
-        pipeline(l)
-
-        l.addView(section("Latest activity"))
-        l.addView(card("Last capture", store.lastCapture, cream, R.drawable.ic_bell))
-        l.addView(card("Last reply", store.lastReply, sage, R.drawable.ic_play))
-        l.addView(card(
-            "RemoteInput",
-            if (store.lastTargetReady) "READY  •  ${store.lastTargetDescription}" else "WAITING  •  no reply action captured yet",
-            if (store.lastTargetReady) sage else clay,
-            R.drawable.ic_reply
-        ))
-        if (store.lastError.isNotBlank()) l.addView(card("Latest error", store.lastError, clay, R.drawable.ic_warning) { screen = 1; render() })
-
-        l.addView(section("Quick operations"))
-        l.addView(actionButton("RUN SYNTHETIC CAPTURE + AI REPLY", R.drawable.ic_play, sage) { runSyntheticTest() })
-        l.addView(actionButton("TEST ACTIVE API", R.drawable.ic_key, olive) { apiOnlyTest() })
-        l.addView(actionButton("OPEN DIAGNOSTICS", R.drawable.ic_test, sky) { screen = 1; render() })
-        l.addView(actionButton("OPEN SETTINGS", R.drawable.ic_settings, cream) { screen = 2; render() })
+        l.addView(section("Operations", "Actions are explicit. Configuration changes are persisted immediately."))
+        l.addView(action("RUN CAPTURE + AI TEST", R.drawable.ic_play, surface2) { runSyntheticTest() })
+        l.addView(action("OPEN API TEST LAB", R.drawable.ic_api, Color.rgb(52, 67, 63)) { screen = 6; render() })
+        l.addView(action("OPEN CHAT CONTEXT", R.drawable.ic_chat, surface2) { screen = 2; render() })
         show(l)
     }
 
-    private fun pipeline(l: LinearLayout) {
-        val steps = listOf(
-            "Capture notification" to hasNotificationAccess(),
-            "Detect RemoteInput" to store.lastTargetReady,
-            "Generate with ${store.provider.uppercase()}" to store.hasApiKey(),
-            "Send reply" to (store.lastReply != "No reply sent yet.")
-        )
-        steps.forEachIndexed { index, pair ->
-            val row = LinearLayout(this).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(11), dp(14), dp(11))
-                background = bg(if (pair.second) sage else cream, 14)
-                layoutParams = LinearLayout.LayoutParams(-1, dp(48)).apply { setMargins(0, dp(3), 0, dp(3)) }
-            }
-            row.addView(tv(if (pair.second) "✓" else "○", 18f, if (pair.second) accent else muted).apply {
-                typeface = Typeface.DEFAULT_BOLD
-                layoutParams = LinearLayout.LayoutParams(dp(27), -2)
-            })
-            row.addView(tv("0${index + 1}  ${pair.first}", 13f, ink))
-            l.addView(row)
+    private fun diagnostics() {
+        val l = shell("Diagnostics", "Verify each layer without silently enabling automation.")
+        l.addView(panel("Notification Access", if (hasNotificationAccess()) "Connected" else "Permission required", if (hasNotificationAccess()) Color.rgb(48, 66, 50) else Color.rgb(73, 44, 37), R.drawable.ic_bell) { openNotificationAccess() })
+        l.addView(panel("Battery", if (batteryIgnored()) "Background exemption active" else "Optimization may restrict background work", if (batteryIgnored()) Color.rgb(48, 66, 50) else Color.rgb(67, 46, 39), R.drawable.ic_bolt) { requestBatteryExemption() })
+        l.addView(panel("RemoteInput", if (store.lastTargetReady) store.lastTargetDescription else "No live reply action captured", if (store.lastTargetReady) Color.rgb(48, 66, 50) else surface, R.drawable.ic_reply))
+        l.addView(section("Capture and responder"))
+        l.addView(action("POST SYNTHETIC ARIA MESSAGE", R.drawable.ic_bell, terracotta) { runSyntheticTest() })
+        l.addView(action("SEND DIRECT REMOTEINPUT TEST", R.drawable.ic_reply, Color.rgb(52, 67, 63)) { directReplyTest() })
+        l.addView(panel("Captured message", store.lastCapture, surface, R.drawable.ic_test))
+        l.addView(panel("Last generated reply", store.lastReply, Color.rgb(48, 66, 50), R.drawable.ic_reply))
+        l.addView(section("API"))
+        l.addView(action("OPEN API TEST LAB", R.drawable.ic_api, Color.rgb(52, 67, 63)) { screen = 6; render() })
+        if (store.lastError.isNotBlank()) l.addView(panel("Runtime error", store.lastError, Color.rgb(73, 44, 37), R.drawable.ic_warning))
+        l.addView(section("Event log"))
+        store.events().take(10).forEach { raw ->
+            val p = raw.split('|', limit = 3); val tag = p.getOrElse(1){"INFO"}; val msg = p.getOrElse(2){raw}
+            l.addView(panel(tag, msg, if (tag == "FAIL") Color.rgb(73, 44, 37) else surface, if (tag == "FAIL") R.drawable.ic_warning else R.drawable.ic_activity))
         }
+        l.addView(action("CLEAR EVENT LOG", R.drawable.ic_trash, surface2) { store.clearEvents(); toast("Event log cleared"); render() })
+        show(l)
     }
 
-    private fun test() {
-        val l = shell("Diagnostics", "Real notification capture, RemoteInput detection, AI generation and reply delivery.")
-        l.addView(card("Notification access", if (hasNotificationAccess()) "CONNECTED" else "ACTION REQUIRED", if (hasNotificationAccess()) sage else clay, R.drawable.ic_bell) { openNotificationAccess() })
-        l.addView(card("Battery policy", if (batteryIgnored()) "OPTIMIZATION EXEMPTION ACTIVE" else "OPTIMIZATION MAY RESTRICT BACKGROUND WORK", if (batteryIgnored()) sage else clay, R.drawable.ic_bolt) { requestBatteryExemption() })
-        l.addView(card("RemoteInput target", if (store.lastTargetReady) "READY  •  ${store.lastTargetDescription}" else "NOT DETECTED  •  post a test notification or receive a WhatsApp message", if (store.lastTargetReady) sage else sky, R.drawable.ic_reply))
-
-        l.addView(section("Capture test"))
-        l.addView(actionButton("POST ARIA SYNTHETIC MESSAGE", R.drawable.ic_bell, clay) { runSyntheticTest() })
-        l.addView(actionButton("SEND DIRECT REMOTEINPUT TEST", R.drawable.ic_reply, sky) { directReplyTest() })
-        l.addView(card("Captured message", store.lastCapture, cream, R.drawable.ic_test))
-        l.addView(card("Last generated reply", store.lastReply, sage, R.drawable.ic_play))
-
-        l.addView(section("API diagnostics"))
-        l.addView(actionButton("TEST ACTIVE PROVIDER", R.drawable.ic_key, olive) { apiOnlyTest() })
-        if (store.lastError.isNotBlank()) l.addView(card("API / runtime error", store.lastError, clay, R.drawable.ic_warning))
-
-        l.addView(section("Activity log", "Latest events are stored locally."))
-        store.events().take(12).forEach { raw ->
-            val parts = raw.split('|', limit = 3)
-            val tag = parts.getOrElse(1) { "INFO" }
-            val msg = parts.getOrElse(2) { raw }
-            l.addView(card(tag, msg, if (tag == "FAIL") clay else cream, if (tag == "FAIL") R.drawable.ic_warning else R.drawable.ic_activity))
+    private fun chats() {
+        val l = shell("Chat Context", "Captured conversations are stored locally and can be injected into AI tests.")
+        val names = store.conversations()
+        if (names.isEmpty()) {
+            l.addView(panel("No chats yet", "Receive a WhatsApp notification or run the synthetic capture test.", surface, R.drawable.ic_chat))
+        } else {
+            names.forEach { name ->
+                val history = store.history(name); val last = history.lastOrNull()?.text ?: "No messages"
+                l.addView(panel(name, "${history.size} messages  •  $last", surface, R.drawable.ic_chat) { selectedChat = name; screen = 5; render() })
+            }
         }
-        l.addView(actionButton("CLEAR ACTIVITY LOG", R.drawable.ic_trash, cream) { store.clearEvents(); toast("Activity log cleared"); render() })
+        l.addView(section("Context policy"))
+        l.addView(panel("Context window", "Up to 10 recent messages from the selected conversation are included in an AI test/reply. Older messages remain visible here but are not sent.", Color.rgb(52, 67, 63), R.drawable.ic_info))
+        l.addView(action("RUN CONTEXT-AWARE API TEST", R.drawable.ic_api, Color.rgb(52, 67, 63)) { if (names.isNotEmpty()) { selectedChat = names.first(); screen = 6; render() } else { screen = 6; render() } })
+        show(l)
+    }
+
+    private fun chatDetail() {
+        val l = shell(selectedChat.ifBlank { "Conversation" }, "Local capture history", { screen = 2; render() })
+        val history = store.history(selectedChat)
+        history.forEach { m ->
+            val mine = m.role == "assistant"
+            val bubble = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(13), dp(10), dp(13), dp(10)); background = shape(if (mine) Color.rgb(48, 66, 50) else surface2, 15); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(if (mine) dp(35) else 0, dp(4), if (mine) 0 else dp(35), dp(4)) } }
+            bubble.addView(tv(if (mine) "ARIA" else m.sender, 10f, if (mine) sage else muted).apply { typeface = Typeface.DEFAULT_BOLD })
+            bubble.addView(tv(m.text, 14f, ink).apply { setPadding(0, dp(5), 0, 0) })
+            bubble.addView(tv(formatTime(m.timestamp), 9f, muted).apply { gravity = Gravity.END; setPadding(0, dp(5), 0, 0) })
+            l.addView(bubble)
+        }
+        l.addView(section("Actions"))
+        l.addView(action("USE THIS CHAT IN API TEST", R.drawable.ic_api, Color.rgb(52, 67, 63)) { screen = 6; render() })
+        l.addView(action("CLEAR THIS CHAT", R.drawable.ic_trash, Color.rgb(73, 44, 37)) { store.clearConversation(selectedChat); toast("Conversation cleared"); screen = 2; render() })
         show(l)
     }
 
     private fun settings() {
-        val l = shell("Settings", "Everything that affects capture, generation and reply is explicit and saved.")
-
+        val l = shell("Settings", "One source of truth for automation, providers, context and reply behavior.")
         l.addView(section("Automation"))
-        val sw = Switch(this).apply {
-            text = if (store.autoReply) "Auto Reply enabled" else "Auto Reply disabled"
-            setTextColor(ink)
-            textSize = 15f
-            isChecked = store.autoReply
-            setOnCheckedChangeListener { _, checked -> text = if (checked) "Auto Reply enabled" else "Auto Reply disabled" }
-        }
+        val sw = Switch(this).apply { text = if (store.autoReply) "Auto Reply enabled" else "Auto Reply disabled"; setTextColor(ink); textSize = 15f; isChecked = store.autoReply; setOnCheckedChangeListener { _, checked -> store.autoReply = checked; text = if (checked) "Auto Reply enabled" else "Auto Reply disabled"; store.logEvent("Auto Reply ${if (checked) "enabled" else "disabled"}", null) } }
         l.addView(sw)
-        l.addView(card("Mode", if (store.autoReply) "BACKGROUND ENGINE ARMED" else "MANUAL / TEST MODE", if (store.autoReply) sage else clay, R.drawable.ic_bolt))
+        l.addView(panel("Engine", if (store.autoReply) "BACKGROUND ENGINE ARMED" else "MANUAL / TEST MODE", if (store.autoReply) Color.rgb(48, 66, 50) else Color.rgb(67, 46, 39), R.drawable.ic_bolt))
 
         l.addView(section("AI provider"))
-        val provider = Spinner(this).apply {
-            background = bg(cream, 15)
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, arrayOf("GROQ", "GEMINI"))
-            setSelection(if (store.provider.equals("GEMINI", true)) 1 else 0)
-            layoutParams = LinearLayout.LayoutParams(-1, dp(52)).apply { setMargins(0, dp(3), 0, dp(8)) }
-        }
-        l.addView(provider)
+        val providerRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; background = shape(surface, 15); setPadding(dp(5), dp(5), dp(5), dp(5)) }
+        val groq = TextView(this).apply { text = "GROQ"; textSize = 13f; gravity = Gravity.CENTER; setTypeface(null, Typeface.BOLD); setTextColor(ink); setPadding(0, dp(12), 0, dp(12)); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+        val gem = TextView(this).apply { text = "GEMINI"; textSize = 13f; gravity = Gravity.CENTER; setTypeface(null, Typeface.BOLD); setTextColor(muted); setPadding(0, dp(12), 0, dp(12)); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+        fun refreshProvider() { val isGroq = store.provider.equals("GROQ", true); groq.background = shape(if (isGroq) Color.rgb(48, 66, 50) else surface, 12); gem.background = shape(if (!isGroq) Color.rgb(52, 67, 63) else surface, 12); groq.setTextColor(if (isGroq) ink else muted); gem.setTextColor(if (!isGroq) ink else muted) }
+        groq.setOnClickListener { store.provider = "GROQ"; refreshProvider(); toast("Groq selected") }
+        gem.setOnClickListener { store.provider = "GEMINI"; refreshProvider(); toast("Gemini selected") }
+        providerRow.addView(groq); providerRow.addView(gem); refreshProvider(); l.addView(providerRow)
 
         l.addView(section("Groq"))
-        val endpoint = input("Groq endpoint", store.endpoint)
-        val model = input("Groq model", store.model)
-        val groqKey = input("Groq API key • encrypted", store.apiKey(), true)
-        l.addView(endpoint); l.addView(model); l.addView(groqKey)
+        val endpoint = field("Groq endpoint", store.endpoint); val model = field("Groq model", store.model); val gKey = field("Groq API key • encrypted", if (store.apiKey().isBlank()) "" else "••••••••••••••••", true)
+        l.addView(endpoint); l.addView(model); l.addView(gKey)
+        gKey.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus && !gKey.text.toString().startsWith("••")) store.setApiKey(gKey.text.toString()) }
+        l.addView(action("TEST GROQ IN API LAB", R.drawable.ic_api, Color.rgb(52, 67, 63)) { screen = 6; render() })
 
         l.addView(section("Gemini"))
-        val gemModel = input("Gemini model", store.geminiModel)
-        val gemKey = input("Gemini API key • encrypted", store.geminiApiKey(), true)
-        l.addView(gemModel); l.addView(gemKey)
+        val gm = field("Gemini model", store.geminiModel); val gmKey = field("Gemini API key • encrypted", if (store.geminiApiKey().isBlank()) "" else "••••••••••••••••", true)
+        l.addView(gm); l.addView(gmKey)
+        gmKey.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus && !gmKey.text.toString().startsWith("••")) store.setGeminiApiKey(gmKey.text.toString()) }
 
-        l.addView(section("Reply behaviour"))
-        val prompt = input("System prompt", store.systemPrompt, false, true)
-        val marker = input("WhatsApp response marker", store.marker)
-        val min = input("Minimum delay (seconds)", store.minDelay.toString()); min.inputType = InputType.TYPE_CLASS_NUMBER
-        val max = input("Maximum delay (seconds)", store.maxDelay.toString()); max.inputType = InputType.TYPE_CLASS_NUMBER
+        l.addView(section("Conversation context"))
+        l.addView(panel("Context window", "The reply engine can use the latest 10 messages from the same sender. Full captured history remains local and viewable under Chats.", Color.rgb(52, 67, 63), R.drawable.ic_chat))
+        l.addView(section("Reply behavior"))
+        val prompt = field("System prompt", store.systemPrompt, false, true); val marker = field("WhatsApp marker", store.marker); val min = field("Minimum delay seconds", store.minDelay.toString()); min.inputType = InputType.TYPE_CLASS_NUMBER; val max = field("Maximum delay seconds", store.maxDelay.toString()); max.inputType = InputType.TYPE_CLASS_NUMBER
         l.addView(prompt); l.addView(marker); l.addView(min); l.addView(max)
 
-        l.addView(section("Operations"))
-        l.addView(actionButton("SAVE ALL CONFIGURATION", R.drawable.ic_save, sage) {
-            store.autoReply = sw.isChecked
-            store.provider = provider.selectedItem.toString()
-            store.endpoint = endpoint.text.toString().trim().ifBlank { AriaStore.DEFAULT_ENDPOINT }
-            store.model = model.text.toString().trim().ifBlank { "llama-3.3-70b-versatile" }
-            store.setApiKey(groqKey.text.toString())
-            store.geminiModel = gemModel.text.toString().trim().ifBlank { "gemini-2.5-flash" }
-            store.setGeminiApiKey(gemKey.text.toString())
-            store.systemPrompt = prompt.text.toString().trim().ifBlank { AriaStore.DEFAULT_PROMPT }
-            store.marker = marker.text.toString()
-            store.minDelay = (min.text.toString().toIntOrNull() ?: 2).coerceAtLeast(0)
-            store.maxDelay = (max.text.toString().toIntOrNull() ?: 5).coerceAtLeast(store.minDelay)
-            store.logEvent("Configuration saved", true)
-            toast("Configuration saved")
-            render()
+        l.addView(section("Save and security"))
+        l.addView(action("SAVE CONFIGURATION", R.drawable.ic_save, Color.rgb(48, 66, 50)) {
+            store.autoReply = sw.isChecked; store.provider = if (store.provider.equals("GEMINI", true)) "GEMINI" else "GROQ"; store.endpoint = endpoint.text.toString().trim().ifBlank { AriaStore.DEFAULT_ENDPOINT }; store.model = model.text.toString().trim().ifBlank { "openai/gpt-oss-120b" }
+            if (!gKey.text.toString().startsWith("••")) store.setApiKey(gKey.text.toString()); store.geminiModel = gm.text.toString().trim().ifBlank { "gemini-2.5-flash" }; if (!gmKey.text.toString().startsWith("••")) store.setGeminiApiKey(gmKey.text.toString()); store.systemPrompt = prompt.text.toString().trim().ifBlank { AriaStore.DEFAULT_PROMPT }; store.marker = marker.text.toString(); store.minDelay = (min.text.toString().toIntOrNull() ?: 2).coerceAtLeast(0); store.maxDelay = (max.text.toString().toIntOrNull() ?: 5).coerceAtLeast(store.minDelay); store.logEvent("Configuration saved", true); toast("Saved"); render()
         })
-        l.addView(actionButton("TEST ACTIVE PROVIDER", R.drawable.ic_play, olive) { apiOnlyTest() })
-        l.addView(actionButton("RESET SYSTEM PROMPT", R.drawable.ic_reset, cream) { store.systemPrompt = AriaStore.DEFAULT_PROMPT; toast("System prompt reset"); render() })
-        l.addView(actionButton("CLEAR API KEYS", R.drawable.ic_trash, clay) { store.clearApiKey(); store.clearGeminiApiKey(); toast("API keys cleared"); render() })
-        l.addView(actionButton("NOTIFICATION ACCESS", R.drawable.ic_bell, sky) { openNotificationAccess() })
-        l.addView(actionButton("BATTERY OPTIMIZATION", R.drawable.ic_bolt, cream) { requestBatteryExemption() })
+        l.addView(action("RESET SYSTEM PROMPT", R.drawable.ic_reset, surface2) { store.systemPrompt = AriaStore.DEFAULT_PROMPT; toast("Prompt reset"); render() })
+        l.addView(action("CLEAR API KEYS", R.drawable.ic_trash, Color.rgb(73, 44, 37)) { store.clearApiKey(); store.clearGeminiApiKey(); toast("API keys cleared"); render() })
+        l.addView(action("NOTIFICATION ACCESS", R.drawable.ic_bell, surface2) { openNotificationAccess() })
+        l.addView(action("BATTERY OPTIMIZATION", R.drawable.ic_bolt, surface2) { requestBatteryExemption() })
         show(l)
     }
 
-    private fun about() {
-        val l = shell("Aria System", "V25 Warm Clay Core — native Android notification automation.")
-        l.addView(card("Design system", "Warm brown base • sage • oat • terracotta • olive • dusty aqua. No white canvas. No elevation shadows. No bento grid.", cream, R.drawable.ic_palette))
-        l.addView(card("Automation", "WhatsApp notification capture → RemoteInput detection → Groq/Gemini generation → guarded reply action.", sage, R.drawable.ic_bolt))
-        l.addView(card("Diagnostics", "Synthetic Aria notification contains a real RemoteInput action. The listener captures it, calls the active AI provider, submits the generated text and the test receiver records the result.", sky, R.drawable.ic_test))
-        l.addView(card("Security", "API keys are encrypted with Android Keystore. Incoming notification text is treated as untrusted data and cannot replace the system prompt.", olive, R.drawable.ic_key))
-        l.addView(card("Compatibility", "Android 8+; direct reply requires the installed messaging app to expose a RemoteInput reply action.", clay, R.drawable.ic_info))
-        l.addView(section("Feature set"))
-        val features = listOf(
-            "01  Warm Clay visual system", "02  Icon-led navigation", "03  Auto Reply state", "04  Provider switch", "05  Groq endpoint + model", "06  Gemini endpoint + model",
-            "07  Keystore API-key storage", "08  Notification access status", "09  Battery optimization status", "10  RemoteInput target state", "11  Synthetic capture notification", "12  Synthetic AI reply loop",
-            "13  Direct RemoteInput test", "14  API-only test", "15  Activity log", "16  Clear activity", "17  Config save", "18  Prompt reset", "19  Delay controls", "20  Runtime error surface"
-        )
-        features.forEach { l.addView(tv(it, 13f, ink).apply { setPadding(dp(4), dp(5), 0, dp(5)) }) }
+    private fun apiTest() {
+        val l = shell("API Test Lab", "A dedicated manual test surface. Nothing is sent until you press Run.", { screen = 0; render() })
+        l.addView(panel("Active provider", "${store.provider.uppercase()}  •  ${activeModel()}", Color.rgb(52, 67, 63), R.drawable.ic_api))
+        l.addView(section("Test message"))
+        val sender = field("Sender name", selectedChat.ifBlank { "TestUser" })
+        val message = field("Write a message to test", "", false, true)
+        l.addView(sender); l.addView(message)
+        l.addView(section("Context"))
+        val useContext = Switch(this).apply { text = if (selectedChat.isBlank()) "Use conversation context" else "Use context from $selectedChat"; setTextColor(ink); isChecked = selectedChat.isNotBlank() && store.history(selectedChat).isNotEmpty() }
+        l.addView(useContext)
+        l.addView(panel("Context preview", if (useContext.isChecked && selectedChat.isNotBlank()) store.recentContext(selectedChat).takeLast(5).joinToString("\n") { "${if (it.role == "assistant") "Aria" else it.sender}: ${it.text}" } else "No context selected.", surface, R.drawable.ic_chat))
+        l.addView(section("Execution"))
+        l.addView(action("RUN API REQUEST", R.drawable.ic_play, Color.rgb(48, 66, 50)) {
+            val who = sender.text.toString().trim().ifBlank { "TestUser" }; val msg = message.text.toString().trim(); if (msg.isBlank()) { toast("Write a test message first"); return@action }
+            val ctx = if (useContext.isChecked && selectedChat.isNotBlank()) store.recentContext(selectedChat) else store.recentContext(who)
+            runManualApiTest(who, msg, ctx)
+        })
+        l.addView(action("OPEN SETTINGS", R.drawable.ic_settings, surface2) { screen = 3; render() })
+        l.addView(section("Result"))
+        l.addView(panel("Last capture", store.lastCapture, surface, R.drawable.ic_test))
+        l.addView(panel("Last response", store.lastReply, Color.rgb(48, 66, 50), R.drawable.ic_reply))
+        if (store.lastError.isNotBlank()) l.addView(panel("API error", store.lastError, Color.rgb(73, 44, 37), R.drawable.ic_warning))
         show(l)
     }
 
-    private fun activeModel() = if (store.provider.equals("GEMINI", true)) store.geminiModel else store.model
+    private fun system() {
+        val l = shell("System", "Aria runtime state, security and build information.")
+        l.addView(panel("Version", "V26 • Dark Clay Core", Color.rgb(52, 67, 63), R.drawable.ic_info))
+        l.addView(panel("Security", "API keys use Android Keystore encryption. Notification text is treated as untrusted input.", surface, R.drawable.ic_key))
+        l.addView(panel("Automation", "Notification capture → conversation context → provider generation → RemoteInput delivery.", Color.rgb(48, 66, 50), R.drawable.ic_bolt))
+        l.addView(panel("Compatibility", "Android 8+; direct replies depend on WhatsApp exposing a RemoteInput action.", surface, R.drawable.ic_info))
+        l.addView(section("Design system"))
+        l.addView(panel("Dark pastel clay", "Cocoa background • mocha surfaces • sage active • dusty teal secondary • terracotta warnings • warm cream text. No white canvas. No elevation shadows. No bento grid.", surface2, R.drawable.ic_palette))
+        l.addView(section("Core modules"))
+        val features = listOf("Dashboard state machine", "Dedicated API Test Lab", "Groq + Gemini providers", "Encrypted API keys", "Conversation history", "Context-aware generation", "Synthetic notification pipeline", "RemoteInput target diagnostics", "Direct responder test", "Notification permission state", "Battery optimization state", "Event log", "Persistent automation toggle", "Model configuration", "System prompt editor", "Reply marker", "Delay controls", "Error body diagnostics", "Chat detail viewer", "Conversation clear control")
+        features.forEachIndexed { i, f -> l.addView(tv("${String.format("%02d", i + 1)}  $f", 13f, ink).apply { setPadding(dp(3), dp(5), 0, dp(5)) }) }
+        show(l)
+    }
+
+    private fun runManualApiTest(sender: String, message: String, context: List<AriaStore.ChatMessage>) {
+        if (!store.hasApiKey()) { toast("Configure the active provider API key first"); screen = 3; render(); return }
+        toast("Calling ${store.provider.uppercase()}…")
+        Thread {
+            val r = AriaApi.generate(store, sender, message, context)
+            runOnUiThread {
+                if (r.ok) { store.lastReply = r.reply; store.lastError = ""; store.logEvent("${store.provider} manual API test passed", true); toast("API test passed") }
+                else { val body = r.raw.take(500).replace("\n", " "); store.lastError = "${r.error} (HTTP ${r.code})${if (body.isNotBlank()) " • $body" else ""}"; store.logEvent("${store.provider} manual API test failed: HTTP ${r.code}", false); toast("API test failed") }
+                render()
+            }
+        }.start()
+    }
 
     private fun runSyntheticTest() {
-        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestNotificationPermission(); toast("Allow notifications, then run the test again"); return
-        }
-        if (!hasNotificationAccess()) { openNotificationAccess(); toast("Grant Notification Access, then run the test again"); return }
-        if (!store.hasApiKey()) { screen = 2; render(); toast("Configure the active AI key first"); return }
-        store.lastError = ""
-        store.lastTargetReady = false
-        store.logEvent("Synthetic capture test posted", null)
-        AriaTestNotification.post(this, "Aria Test Contact", "Hello Aria, this is a synthetic capture test.")
-        toast("Synthetic message posted")
-        screen = 1
-        render()
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) { requestNotificationPermission(); toast("Allow notifications, then run again"); return }
+        if (!hasNotificationAccess()) { openNotificationAccess(); toast("Grant Notification Access, then run again"); return }
+        if (!store.hasApiKey()) { screen = 3; render(); toast("Configure the active provider key first"); return }
+        store.lastError = ""; store.lastTargetReady = false; store.logEvent("Synthetic capture test posted", null); AriaTestNotification.post(this, "Aria Test Contact", "Hello Aria, this is a synthetic capture test."); toast("Synthetic message posted"); screen = 1; render()
     }
 
-    private fun directReplyTest() {
-        if (!store.lastTargetReady) { toast("No RemoteInput target captured yet"); return }
-        Thread {
-            val ok = AriaNotificationListener.sendDirectReply(this, "Aria direct responder test")
-            runOnUiThread {
-                if (ok) { store.lastReply = "Aria direct responder test"; store.lastError = ""; store.logEvent("Direct RemoteInput test reply sent", true); toast("Direct reply sent") }
-                else { store.lastError = "No active RemoteInput target"; store.logEvent("Direct RemoteInput test failed", false); toast("No active target") }
-                render()
-            }
-        }.start()
-    }
-
-    private fun apiOnlyTest() {
-        if (!store.hasApiKey()) { toast("Configure the active AI key first"); return }
-        Thread {
-            val r = AriaApi.generate(store, "Aria Test", "Reply with a short test confirmation.")
-            runOnUiThread {
-                if (r.ok) {
-                    store.lastReply = r.reply
-                    store.lastError = ""
-                    store.logEvent("${store.provider} API test passed", true)
-                    toast("${store.provider} API passed")
-                } else {
-                    val body = r.raw.take(260).replace("\n", " ")
-                    store.lastError = "${r.error} (HTTP ${r.code})${if (body.isNotBlank()) " • $body" else ""}"
-                    store.logEvent("${store.provider} API test failed: HTTP ${r.code}", false)
-                    toast("API test failed")
-                }
-                render()
-            }
-        }.start()
-    }
-
-    private fun hasNotificationAccess() =
-        (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName)
-
-    private fun requestNotificationPermission() {
-        if (android.os.Build.VERSION.SDK_INT >= 33) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
-    }
-
+    private fun directReplyTest() { if (!store.lastTargetReady) { toast("No RemoteInput target captured yet"); return }; Thread { val ok = AriaNotificationListener.sendDirectReply(this, "Aria direct responder test"); runOnUiThread { if (ok) { store.lastReply = "Aria direct responder test"; store.lastError = ""; store.logEvent("Direct RemoteInput test reply sent", true); toast("Direct reply sent") } else { store.lastError = "No active RemoteInput target"; toast("No active target") }; render() } }.start() }
+    private fun activeModel() = if (store.provider.equals("GEMINI", true)) store.geminiModel else store.model
+    private fun hasNotificationAccess() = (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName)
+    private fun requestNotificationPermission() { if (android.os.Build.VERSION.SDK_INT >= 33) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001) }
     private fun openNotificationAccess() = startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
-
-    private fun batteryIgnored() =
-        (getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
-
-    private fun requestBatteryExemption() {
-        runCatching {
-            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
-        }.onFailure { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-    }
-
+    private fun batteryIgnored() = (getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+    private fun requestBatteryExemption() { runCatching { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))) }.onFailure { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }
+    private fun formatTime(ts: Long) = SimpleDateFormat("dd MMM • HH:mm", Locale.getDefault()).format(Date(ts))
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
 }
