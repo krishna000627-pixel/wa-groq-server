@@ -19,7 +19,7 @@ class AriaStore(context: Context) {
     var autoReply: Boolean get() = prefs.getBoolean("auto", false); set(v) = prefs.edit().putBoolean("auto", v).apply()
     var provider: String get() = prefs.getString("provider", "GROQ") ?: "GROQ"; set(v) = prefs.edit().putString("provider", v).apply()
     var endpoint: String get() = prefs.getString("endpoint", DEFAULT_ENDPOINT) ?: DEFAULT_ENDPOINT; set(v) = prefs.edit().putString("endpoint", v).apply()
-    var model: String get() = prefs.getString("model", "llama-3.3-70b-versatile") ?: ""; set(v) = prefs.edit().putString("model", v).apply()
+    var model: String get() = prefs.getString("model", "llama-3.3-70b-versatile") ?: "llama-3.3-70b-versatile"; set(v) = prefs.edit().putString("model", v).apply()
     var geminiModel: String get() = prefs.getString("geminiModel", "gemini-2.5-flash") ?: "gemini-2.5-flash"; set(v) = prefs.edit().putString("geminiModel", v).apply()
     var systemPrompt: String get() = prefs.getString("prompt", DEFAULT_PROMPT) ?: DEFAULT_PROMPT; set(v) = prefs.edit().putString("prompt", v).apply()
     var marker: String get() = prefs.getString("marker", "*Automated Response*\n") ?: ""; set(v) = prefs.edit().putString("marker", v).apply()
@@ -28,6 +28,10 @@ class AriaStore(context: Context) {
     var lastCapture: String get() = prefs.getString("lastCapture", "No notification captured yet.") ?: ""; set(v) = prefs.edit().putString("lastCapture", v).apply()
     var lastReply: String get() = prefs.getString("lastReply", "No reply sent yet.") ?: ""; set(v) = prefs.edit().putString("lastReply", v).apply()
     var lastError: String get() = prefs.getString("lastError", "") ?: ""; set(v) = prefs.edit().putString("lastError", v).apply()
+    var lastTargetReady: Boolean get() = prefs.getBoolean("targetReady", false); set(v) = prefs.edit().putBoolean("targetReady", v).apply()
+    var lastTargetDescription: String get() = prefs.getString("targetDescription", "No RemoteInput target captured yet.") ?: ""; set(v) = prefs.edit().putString("targetDescription", v).apply()
+    var lastTargetPackage: String get() = prefs.getString("targetPackage", "") ?: ""; set(v) = prefs.edit().putString("targetPackage", v).apply()
+    var lastTargetAt: Long get() = prefs.getLong("targetAt", 0L); set(v) = prefs.edit().putLong("targetAt", v).apply()
 
     fun hasApiKey(): Boolean = if (provider.equals("GEMINI", true)) hasGeminiKey() else apiKey().isNotBlank()
     fun hasGeminiKey(): Boolean = geminiApiKey().isNotBlank()
@@ -65,7 +69,9 @@ class AriaStore(context: Context) {
         val item = "${System.currentTimeMillis()}|$prefix|$message"
         prefs.edit().putStringSet("events", (existing + item).takeLast(100).toSet()).apply()
     }
+
     fun events(): List<String> = prefs.getStringSet("events", emptySet())?.toList()?.sortedByDescending { it.substringBefore('|').toLongOrNull() ?: 0L }.orEmpty()
+    fun clearEvents() { prefs.edit().remove("events").apply() }
 
     private fun getOrCreateKey(alias: String): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

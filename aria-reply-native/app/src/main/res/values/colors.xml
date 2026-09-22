@@ -1,14 +1,7 @@
 <resources>
-    <color name="aria_bg">#EDE5D8</color>
-    <color name="aria_surface">#F7F1E7</color>
-    <color name="aria_mint">#D6E8D8</color>
-    <color name="aria_lavender">#E2D9D0</color>
-    <color name="aria_peach">#E8D0BC</color>
-    <color name="aria_sky">#D5E2DE</color>
-    <color name="aria_ink">#29342F</color>
-    <color name="aria_muted">#6D766F</color>
-    <color name="aria_green">#4F8068</color>
-    <color name="aria_red">#A75C58</color>
-    <color name="aria_yellow">#9A7841</color>
-    <color name="aria_shadow">#D5CABC</color>
+    <color name="aria_bg">#E8D7C5</color>
+    <color name="aria_surface">#F6EBDD</color>
+    <color name="aria_ink">#3A2A22</color>
+    <color name="aria_muted">#77655A</color>
+    <color name="aria_accent">#5B775E</color>
 </resources>

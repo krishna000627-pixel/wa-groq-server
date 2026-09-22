@@ -2,22 +2,22 @@
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:background="@color/aria_bg">
     <FrameLayout android:id="@+id/page" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="78dp" android:orientation="horizontal" android:padding="6dp" android:background="@color/aria_surface">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="74dp" android:orientation="horizontal" android:padding="7dp" android:background="@color/aria_surface">
         <LinearLayout android:id="@+id/navHome" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_home"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Home" android:textSize="11sp" android:textColor="@color/aria_ink"/>
+            <ImageView android:layout_width="23dp" android:layout_height="23dp" android:src="@drawable/ic_home" android:tint="@color/aria_ink"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Home" android:textSize="10sp" android:textColor="@color/aria_ink" android:textStyle="bold"/>
         </LinearLayout>
         <LinearLayout android:id="@+id/navTest" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_test"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Test" android:textSize="11sp" android:textColor="@color/aria_ink"/>
+            <ImageView android:layout_width="23dp" android:layout_height="23dp" android:src="@drawable/ic_test" android:tint="@color/aria_ink"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Test" android:textSize="10sp" android:textColor="@color/aria_ink" android:textStyle="bold"/>
         </LinearLayout>
         <LinearLayout android:id="@+id/navSettings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Settings" android:textSize="11sp" android:textColor="@color/aria_ink"/>
+            <ImageView android:layout_width="23dp" android:layout_height="23dp" android:src="@drawable/ic_settings" android:tint="@color/aria_ink"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Settings" android:textSize="10sp" android:textColor="@color/aria_ink" android:textStyle="bold"/>
         </LinearLayout>
         <LinearLayout android:id="@+id/navAbout" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_info"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="About" android:textSize="11sp" android:textColor="@color/aria_ink"/>
+            <ImageView android:layout_width="23dp" android:layout_height="23dp" android:src="@drawable/ic_info" android:tint="@color/aria_ink"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="System" android:textSize="10sp" android:textColor="@color/aria_ink" android:textStyle="bold"/>
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -1,6 +1,5 @@
 package com.aria.reply
 
-import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Intent
 import android.os.Bundle
@@ -10,46 +9,6 @@ import java.util.concurrent.Executors
 import kotlin.random.Random
 
 class AriaNotificationListener : NotificationListenerService() {
-
-    companion object {
-        data class ReplyTarget(
-            val intent: PendingIntent,
-            val inputs: Array<RemoteInput>,
-            val resultKey: String
-        )
-
-        @Volatile
-        var lastReplyTarget: ReplyTarget? = null
-
-        @Volatile
-        var lastReplyTargetDescription: String = ""
-
-        fun sendDirectReply(
-            context: android.content.Context,
-            text: String
-        ): Boolean {
-            val target = lastReplyTarget ?: return false
-
-            return runCatching {
-                val results = Bundle().apply {
-                    putCharSequence(target.resultKey, text)
-                }
-
-                val fillIn = Intent().apply {
-                    RemoteInput.addResultsToIntent(
-                        target.inputs,
-                        this,
-                        results
-                    )
-                }
-
-                target.intent.send(context, 0, fillIn)
-                true
-            }.getOrDefault(false)
-        }
-    }
-
-
     private val executor = Executors.newSingleThreadExecutor()
     private val seen = LinkedHashMap<String, Long>()
     private lateinit var store: AriaStore
@@ -58,8 +17,9 @@ class AriaNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName
-        val synthetic = pkg == packageName && extrasFlag(sbn)
+        val synthetic = pkg == packageName && sbn.notification.extras?.getBoolean("aria_synthetic_test", false) == true
         if (pkg != "com.whatsapp" && pkg != "com.whatsapp.w4b" && !synthetic) return
+
         val notification = sbn.notification ?: return
         val extras = notification.extras
         val title = extras.getString("android.title")?.trim().orEmpty()
@@ -73,29 +33,38 @@ class AriaNotificationListener : NotificationListenerService() {
             seen[key] = now
             if (seen.size > 100) seen.remove(seen.keys.first())
         }
+
         store.lastCapture = "$title: $text"
-        if (!store.autoReply && !synthetic) return
+        store.logEvent("Captured ${if (synthetic) "synthetic" else "WhatsApp"} notification from $title", null)
 
-        val action = notification.actions?.firstOrNull { action ->
-            action.remoteInputs?.any { it.allowFreeFormInput } == true
-        } ?: return
-        val remoteInput = action.remoteInputs?.firstOrNull() ?: return
-
-
-        // Cache the latest WhatsApp RemoteInput target for diagnostics/direct testing.
-        val detectedInputs = action.remoteInputs ?: emptyArray()
-        if (detectedInputs.isNotEmpty()) {
-            lastReplyTarget = ReplyTarget(
-                action.actionIntent,
-                detectedInputs,
-                detectedInputs.first().resultKey
-            )
-            lastReplyTargetDescription = title
+        val action = notification.actions?.firstOrNull { a -> a.remoteInputs?.any { it.allowFreeFormInput } == true }
+        if (action == null) {
+            store.lastTargetReady = false
+            store.lastTargetDescription = "Notification captured, but no RemoteInput reply action was exposed."
+            store.lastTargetPackage = pkg
+            store.lastTargetAt = now
+            if (!store.autoReply && !synthetic) return
+            return
         }
+
+        val remoteInput = action.remoteInputs?.firstOrNull { it.allowFreeFormInput } ?: return
+        store.lastTargetReady = true
+        store.lastTargetDescription = "$pkg • ${action.title ?: "Reply"} • ${remoteInput.resultKey}"
+        store.lastTargetPackage = pkg
+        store.lastTargetAt = now
+        lastReplyAction = action
+        lastRemoteInput = remoteInput
+        store.logEvent("RemoteInput target detected", true)
+
+        if (!store.autoReply && !synthetic) return
 
         executor.execute {
             val result = AriaApi.generate(store, title, text)
-            if (!result.ok || result.reply.isBlank()) return@execute
+            if (!result.ok || result.reply.isBlank()) {
+                store.lastError = "${result.error} (HTTP ${result.code})"
+                store.logEvent("AI generation failed: HTTP ${result.code}", false)
+                return@execute
+            }
             val min = store.minDelay
             val max = maxOf(store.maxDelay, min)
             val delay = if (max == min) min else Random.nextInt(min, max + 1)
@@ -103,13 +72,37 @@ class AriaNotificationListener : NotificationListenerService() {
             val reply = store.marker + result.reply
             val results = Bundle().apply { putCharSequence(remoteInput.resultKey, reply) }
             val fillIn = Intent().apply { RemoteInput.addResultsToIntent(action.remoteInputs, this, results) }
-            runCatching { action.actionIntent.send(this, 0, fillIn) }
-            store.lastReply = reply
+            val sent = runCatching { action.actionIntent.send(this, 0, fillIn); true }.getOrDefault(false)
+            if (sent) {
+                store.lastReply = reply
+                store.lastError = ""
+                store.logEvent("Reply delivered through RemoteInput", true)
+            } else {
+                store.lastError = "RemoteInput PendingIntent could not be sent"
+                store.logEvent("RemoteInput reply send failed", false)
+            }
         }
     }
 
-    private fun extrasFlag(sbn: StatusBarNotification): Boolean =
-        sbn.notification.extras?.getBoolean("aria_synthetic_test", false) == true
+    companion object {
+        @Volatile private var lastReplyAction: android.app.Notification.Action? = null
+        @Volatile private var lastRemoteInput: RemoteInput? = null
+
+        fun sendDirectReply(context: android.content.Context, reply: String): Boolean {
+            val action = lastReplyAction ?: return false
+            val remoteInput = lastRemoteInput ?: return false
+            return runCatching {
+                val results = Bundle().apply { putCharSequence(remoteInput.resultKey, reply) }
+                val fillIn = Intent().apply { RemoteInput.addResultsToIntent(action.remoteInputs, this, results) }
+                action.actionIntent.send(context, 0, fillIn)
+                AriaStore(context).logEvent("Direct RemoteInput action invoked", true)
+                true
+            }.getOrElse {
+                AriaStore(context).logEvent("Direct RemoteInput action failed: ${it.message}", false)
+                false
+            }
+        }
+    }
 
     override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
 }
