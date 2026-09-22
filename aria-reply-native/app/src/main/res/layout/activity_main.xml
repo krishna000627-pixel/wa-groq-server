@@ -1,0 +1,88 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/aria_bg">
+
+    <FrameLayout
+        android:id="@+id/page"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:id="@+id/navBar"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:orientation="horizontal"
+        android:background="@color/aria_surface"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <LinearLayout android:id="@+id/navHome"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:orientation="vertical" android:gravity="center">
+            <ImageView android:id="@+id/navHomeIcon"
+                android:layout_width="22dp" android:layout_height="22dp"
+                android:src="@drawable/ic_home" android:tint="@color/aria_muted"/>
+            <TextView android:id="@+id/navHomeLabel"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Home" android:textSize="10sp"
+                android:textColor="@color/aria_muted" android:textStyle="bold"
+                android:layout_marginTop="3dp"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/navChats"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:orientation="vertical" android:gravity="center">
+            <ImageView android:id="@+id/navChatsIcon"
+                android:layout_width="22dp" android:layout_height="22dp"
+                android:src="@drawable/ic_chat" android:tint="@color/aria_muted"/>
+            <TextView android:id="@+id/navChatsLabel"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Chats" android:textSize="10sp"
+                android:textColor="@color/aria_muted" android:textStyle="bold"
+                android:layout_marginTop="3dp"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/navTest"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:orientation="vertical" android:gravity="center">
+            <ImageView android:id="@+id/navTestIcon"
+                android:layout_width="22dp" android:layout_height="22dp"
+                android:src="@drawable/ic_api" android:tint="@color/aria_muted"/>
+            <TextView android:id="@+id/navTestLabel"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Lab" android:textSize="10sp"
+                android:textColor="@color/aria_muted" android:textStyle="bold"
+                android:layout_marginTop="3dp"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/navSettings"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:orientation="vertical" android:gravity="center">
+            <ImageView android:id="@+id/navSettingsIcon"
+                android:layout_width="22dp" android:layout_height="22dp"
+                android:src="@drawable/ic_settings" android:tint="@color/aria_muted"/>
+            <TextView android:id="@+id/navSettingsLabel"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Settings" android:textSize="10sp"
+                android:textColor="@color/aria_muted" android:textStyle="bold"
+                android:layout_marginTop="3dp"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/navSystem"
+            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:orientation="vertical" android:gravity="center">
+            <ImageView android:id="@+id/navSystemIcon"
+                android:layout_width="22dp" android:layout_height="22dp"
+                android:src="@drawable/ic_info" android:tint="@color/aria_muted"/>
+            <TextView android:id="@+id/navSystemLabel"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="System" android:textSize="10sp"
+                android:textColor="@color/aria_muted" android:textStyle="bold"
+                android:layout_marginTop="3dp"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</LinearLayout>
