@@ -65,7 +65,7 @@ class MainActivity : Activity() {
         l.addView(tv("LIVE PIPELINE",12f,muted).apply{typeface=Typeface.DEFAULT_BOLD;setPadding(0,dp(18),0,dp(4))})
         val pipe=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(14),dp(10),dp(14),dp(10))}
         val steps=listOf("01  Capture notification" to (hasNotificationAccess()),"02  Detect RemoteInput" to (AriaNotificationListener.lastReplyTarget!=null),"03  Generate with ${store.provider}" to store.hasApiKey(),"04  Send reply" to (store.lastReply!="No reply sent yet."))
-        steps.forEach{(name,ok)->pipe.addView(tv("${if(ok)"●" else "○"}  $name",14f,if(ok) green else muted).apply{setPadding(dp(6),dp(7),0,dp(7))})};pipe.background=panel(surface,24);pipe.l.addView(pipe)
+        steps.forEach{(name,ok)->pipe.addView(tv("${if(ok)"●" else "○"}  $name",14f,if(ok) green else muted).apply{setPadding(dp(6),dp(7),0,dp(7))})};pipe.background=panel(surface,24);l.addView(pipe)
         l.addView(clay("LAST CAPTURE",store.lastCapture,surface,R.drawable.ic_bell))
         l.addView(clay("LAST REPLY",store.lastReply,mint,R.drawable.ic_play))
         if(store.lastError.isNotBlank())l.addView(clay("LATEST ERROR",store.lastError,peach,R.drawable.ic_info){screen=1;render()})
