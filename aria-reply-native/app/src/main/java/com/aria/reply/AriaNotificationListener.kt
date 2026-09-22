@@ -1,5 +1,6 @@
 package com.aria.reply
 
+import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Intent
 import android.os.Bundle
@@ -9,6 +10,46 @@ import java.util.concurrent.Executors
 import kotlin.random.Random
 
 class AriaNotificationListener : NotificationListenerService() {
+
+    companion object {
+        data class ReplyTarget(
+            val intent: PendingIntent,
+            val inputs: Array<RemoteInput>,
+            val resultKey: String
+        )
+
+        @Volatile
+        var lastReplyTarget: ReplyTarget? = null
+
+        @Volatile
+        var lastReplyTargetDescription: String = ""
+
+        fun sendDirectReply(
+            context: android.content.Context,
+            text: String
+        ): Boolean {
+            val target = lastReplyTarget ?: return false
+
+            return runCatching {
+                val results = Bundle().apply {
+                    putCharSequence(target.resultKey, text)
+                }
+
+                val fillIn = Intent().apply {
+                    RemoteInput.addResultsToIntent(
+                        target.inputs,
+                        this,
+                        results
+                    )
+                }
+
+                target.intent.send(context, 0, fillIn)
+                true
+            }.getOrDefault(false)
+        }
+    }
+
+
     private val executor = Executors.newSingleThreadExecutor()
     private val seen = LinkedHashMap<String, Long>()
     private lateinit var store: AriaStore
@@ -39,6 +80,18 @@ class AriaNotificationListener : NotificationListenerService() {
             action.remoteInputs?.any { it.allowFreeFormInput } == true
         } ?: return
         val remoteInput = action.remoteInputs?.firstOrNull() ?: return
+
+
+        // Cache the latest WhatsApp RemoteInput target for diagnostics/direct testing.
+        val detectedInputs = action.remoteInputs ?: emptyArray()
+        if (detectedInputs.isNotEmpty()) {
+            lastReplyTarget = ReplyTarget(
+                action.actionIntent,
+                detectedInputs,
+                detectedInputs.first().resultKey
+            )
+            lastReplyTargetDescription = title
+        }
 
         executor.execute {
             val result = AriaApi.generate(store, title, text)
