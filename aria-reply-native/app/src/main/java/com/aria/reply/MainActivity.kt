@@ -155,7 +155,12 @@ class MainActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(-1, dp(52)).apply { setMargins(dp(20), dp(7), dp(20), dp(7)) }
     }
 
-    private fun outlineButton(label: String, action: () -> Unit, small: Boolean = false): Button = Button(this).apply {
+    private fun outlineButton(
+    label: String,
+    action: () -> Unit
+): Button = outlineButton(label, action, false)
+
+private fun outlineButton(label: String, action: () -> Unit, small: Boolean = false): Button = Button(this).apply {
         text = label
         textSize = if (small) 12f else 14f
         setTextColor(accent)
