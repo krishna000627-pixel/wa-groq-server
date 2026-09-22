@@ -1,5 +1,0 @@
-<resources>
-    <string name="app_name">Aria Reply</string>
-    <string name="notification_listener_label">Aria WhatsApp Capture</string>
-    <string name="notification_listener_description">Reads WhatsApp notifications for Aria context and auto-reply.</string>
-</resources>
