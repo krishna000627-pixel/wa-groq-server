@@ -1,7 +1,12 @@
 <resources>
-    <color name="aria_bg">#2A1D18</color>
-    <color name="aria_surface">#34251F</color>
-    <color name="aria_ink">#F9EDDC</color>
-    <color name="aria_muted">#B9A293</color>
-    <color name="aria_accent">#8FAF8F</color>
+    <color name="cocoa">#241714</color>
+    <color name="cocoa2">#33211B</color>
+    <color name="clay">#493026</color>
+    <color name="clay2">#5A3A2F</color>
+    <color name="sage">#A8B58A</color>
+    <color name="mint">#B9CDAE</color>
+    <color name="cream">#F0E2D0</color>
+    <color name="muted">#BDAA98</color>
+    <color name="terracotta">#C97A5A</color>
+    <color name="teal">#86AAA0</color>
 </resources>

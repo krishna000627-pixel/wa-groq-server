@@ -1,10 +1,9 @@
 <resources>
-    <style name="Theme.AriaReply" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.Aria" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#2A1D18</item>
-        <item name="android:navigationBarColor">#2A1D18</item>
-        <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">#8FAF8F</item>
+        <item name="android:statusBarColor">@color/cocoa</item>
+        <item name="android:navigationBarColor">@color/cocoa</item>
+        <item name="android:colorAccent">@color/sage</item>
     </style>
 </resources>
