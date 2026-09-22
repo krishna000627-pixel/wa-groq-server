@@ -91,6 +91,29 @@ jobs:
           mkdir -p release
           cp "$APK" release/aria-reply-native-v30-signed.apk
 
+          echo "===== APK INTEGRITY ====="
+          unzip -t "$APK"
+
+          echo "===== APK SIGNATURE ====="
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          if [ ! -x "$APKSIGNER" ]; then
+            APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          fi
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+
+          echo "===== APK BADGING ====="
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          if [ ! -x "$AAPT" ]; then
+            AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          fi
+          "$AAPT" dump badging "$APK" | head -30
+
+          echo "===== MANIFEST ICON ====="
+          grep -R 'android:icon\|android:roundIcon' app/src/main/AndroidManifest.xml || true
+
+          echo "===== ICON FILES ====="
+          find app/src/main/res -type f | grep -E 'ic_launcher|launcher' | sort || true
+
           echo "===== FINAL ARTIFACT ====="
           test -s release/aria-reply-native-v30-signed.apk
           ls -lh release/aria-reply-native-v30-signed.apk
