@@ -1,0 +1,7 @@
+<resources>
+    <color name="aria_bg">#2A1D18</color>
+    <color name="aria_surface">#34251F</color>
+    <color name="aria_ink">#F9EDDC</color>
+    <color name="aria_muted">#B9A293</color>
+    <color name="aria_accent">#8FAF8F</color>
+</resources>
