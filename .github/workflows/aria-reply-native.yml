@@ -66,11 +66,35 @@ jobs:
           ARIA_KEY_PASSWORD: ${{ secrets.ARIA_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          ./gradlew clean assembleRelease --no-daemon
-          APK="app/build/outputs/apk/release/app-release.apk"
+
+          echo "===== GRADLE VERSION ====="
+          ./gradlew --version
+
+          echo "===== BUILD RELEASE ====="
+          ./gradlew clean assembleRelease --no-daemon --console=plain
+
+          echo "===== LOCATE APK ====="
+          find app/build/outputs -type f -name "*.apk" -print
+
+          APK="$(find app/build/outputs/apk/release -type f -name "*.apk" -print -quit)"
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: Release APK was not generated."
+            exit 1
+          fi
+
           test -s "$APK"
-          echo "Release APK generated successfully."
+
+          echo "Release APK generated successfully:"
           ls -lh "$APK"
+
+          mkdir -p release
+          cp "$APK" release/aria-reply-native-v30-signed.apk
+
+          echo "===== FINAL ARTIFACT ====="
+          test -s release/aria-reply-native-v30-signed.apk
+          ls -lh release/aria-reply-native-v30-signed.apk
+          echo "BUILD_STEP_OK=1"
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
