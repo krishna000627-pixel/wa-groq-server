@@ -9,4 +9,7 @@
     <color name="muted">#BDAA98</color>
     <color name="terracotta">#C97A5A</color>
     <color name="teal">#86AAA0</color>
+    <color name="aria_bg">#241812</color>
+    <color name="aria_surface">#34241D</color>
+    <color name="aria_ink">#F3E6D8</color>
 </resources>
