@@ -100,5 +100,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aria-reply-native-v30-signed
-          path: aria-reply-native/app/build/outputs/apk/release/app-release.apk
+          path: aria-reply-native/release/aria-reply-native-v30-signed.apk
           if-no-files-found: error
