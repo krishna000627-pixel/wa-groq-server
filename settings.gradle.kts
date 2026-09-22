@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "AriaReplyNativeV28"
+rootProject.name = "AriaReplyNativeV30"
 include(":app")

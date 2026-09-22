@@ -2,74 +2,129 @@ package com.aria.reply;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import java.util.ArrayList;
-import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class AriaStore {
     private final SharedPreferences p;
-    public AriaStore(Context c) { p = c.getSharedPreferences("aria_v28", Context.MODE_PRIVATE); }
 
-    public void put(String k, String v) { p.edit().putString(k, v).apply(); }
-    public String get(String k, String d) { return p.getString(k, d); }
-    public void bool(String k, boolean v) { p.edit().putBoolean(k, v).apply(); }
+    public AriaStore(Context c) {
+        p = c.getSharedPreferences("aria_v30", Context.MODE_PRIVATE);
+    }
+
+    // ── primitive store ──────────────────────────────────────────────────────
+    public void put(String k, String v)    { p.edit().putString(k, v).apply(); }
+    public String get(String k, String d)  { return p.getString(k, d); }
+    public void bool(String k, boolean v)  { p.edit().putBoolean(k, v).apply(); }
     public boolean bool(String k, boolean d) { return p.getBoolean(k, d); }
 
+    // ── contact identity cache ───────────────────────────────────────────────
+    public void cacheContact(String raw, String resolved) {
+        try {
+            JSONObject map = new JSONObject(get("contact_cache", "{}"));
+            map.put(raw, resolved);
+            put("contact_cache", map.toString());
+        } catch (Exception ignored) {}
+    }
+    public String cachedContact(String raw) {
+        try {
+            JSONObject map = new JSONObject(get("contact_cache", "{}"));
+            return map.optString(raw, raw);
+        } catch (Exception e) { return raw; }
+    }
+
+    // ── messages (per-contact, role-separated) ───────────────────────────────
     public synchronized void addMessage(String contact, String role, String text) {
         try {
             JSONArray a = new JSONArray(get("messages", "[]"));
             JSONObject o = new JSONObject();
             o.put("contact", contact);
-            o.put("role", role);
+            o.put("role", role);           // "user" | "assistant"
             o.put("text", text);
             o.put("time", System.currentTimeMillis());
             a.put(o);
-            while (a.length() > 300) a.remove(0);
+            while (a.length() > 400) a.remove(0);
             put("messages", a.toString());
         } catch (Exception ignored) {}
     }
 
+    /** Returns last {@code max} turns for {@code contact}, user+assistant interleaved. */
     public synchronized String context(String contact, int max) {
         try {
             JSONArray a = new JSONArray(get("messages", "[]"));
             StringBuilder b = new StringBuilder();
             int count = 0;
-            for (int i=a.length()-1; i>=0 && count<max; i--) {
-                JSONObject o=a.getJSONObject(i);
+            for (int i = a.length() - 1; i >= 0 && count < max; i--) {
+                JSONObject o = a.getJSONObject(i);
                 if (contact.equals(o.optString("contact"))) {
-                    b.insert(0, o.optString("role")+": "+o.optString("text")+"\n");
+                    b.insert(0, o.optString("role") + ": " + o.optString("text") + "\n");
                     count++;
                 }
             }
             return b.toString().trim();
-        } catch(Exception e) { return ""; }
+        } catch (Exception e) { return ""; }
     }
 
+    /** Returns all unique contacts that have messages. */
+    public synchronized java.util.List<String> contacts() {
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+        try {
+            JSONArray a = new JSONArray(get("messages", "[]"));
+            // newest first — iterate backwards
+            for (int i = a.length() - 1; i >= 0; i--)
+                seen.add(a.getJSONObject(i).optString("contact"));
+        } catch (Exception ignored) {}
+        return new java.util.ArrayList<>(seen);
+    }
+
+    /** Returns latest message text for a contact (for chat list preview). */
+    public synchronized String lastMessage(String contact) {
+        try {
+            JSONArray a = new JSONArray(get("messages", "[]"));
+            for (int i = a.length() - 1; i >= 0; i--) {
+                JSONObject o = a.getJSONObject(i);
+                if (contact.equals(o.optString("contact")))
+                    return o.optString("text");
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    // ── follow-up actions ────────────────────────────────────────────────────
     public synchronized void addAction(String contact, String title, String detail) {
         try {
             JSONArray a = new JSONArray(get("actions", "[]"));
-            JSONObject o=new JSONObject();
-            o.put("id", System.currentTimeMillis());
+            JSONObject o = new JSONObject();
+            o.put("id",      System.currentTimeMillis());
             o.put("contact", contact);
-            o.put("title", title);
-            o.put("detail", detail);
-            o.put("done", false);
+            o.put("title",   title);
+            o.put("detail",  detail);
+            o.put("done",    false);
             a.put(o);
             put("actions", a.toString());
-        } catch(Exception ignored) {}
+        } catch (Exception ignored) {}
     }
 
-    public synchronized String actions() { return get("actions","[]"); }
+    public synchronized String actions() { return get("actions", "[]"); }
+
+    public synchronized int pendingActionCount() {
+        try {
+            JSONArray a = new JSONArray(get("actions", "[]"));
+            int n = 0;
+            for (int i = 0; i < a.length(); i++)
+                if (!a.getJSONObject(i).optBoolean("done")) n++;
+            return n;
+        } catch (Exception e) { return 0; }
+    }
 
     public synchronized void completeAction(long id) {
         try {
-            JSONArray a=new JSONArray(get("actions","[]"));
-            for(int i=0;i<a.length();i++) {
-                JSONObject o=a.getJSONObject(i);
-                if(o.optLong("id")==id) o.put("done",true);
+            JSONArray a = new JSONArray(get("actions", "[]"));
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                if (o.optLong("id") == id) o.put("done", true);
             }
-            put("actions",a.toString());
-        } catch(Exception ignored) {}
+            put("actions", a.toString());
+        } catch (Exception ignored) {}
     }
 }

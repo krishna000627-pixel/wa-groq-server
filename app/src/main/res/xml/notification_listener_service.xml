@@ -1,4 +1,3 @@
-<notification-listener-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:description="@string/notification_listener_description"
-    android:notificationListenerFilterType="conversations"
-    android:settingsActivity="com.aria.reply.MainActivity" />
+<?xml version="1.0" encoding="utf-8"?>
+<notification-listener xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.aria.reply.MainActivity"/>
