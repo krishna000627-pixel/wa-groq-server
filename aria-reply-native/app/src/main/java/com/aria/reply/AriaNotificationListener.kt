@@ -31,6 +31,13 @@ class AriaNotificationListener : NotificationListenerService() {
         val text = extras.getCharSequence("android.text")?.toString()?.trim().orEmpty()
         if (title.isBlank() || text.isBlank()) return
 
+        // WhatsApp notification summaries are metadata, not messages.
+        // Never store or send summaries such as "2 new messages" to the AI.
+        if (!synthetic && isWhatsAppNotificationSummary(text)) {
+            store.logEvent("Ignored WhatsApp notification summary: $text", null)
+            return
+        }
+
         // WhatsApp also posts our own sent messages. Never treat those as new user input.
         // Without this guard Aria can reply to its own reply and create a reply loop.
         if (title.equals("You", ignoreCase = true)) {
@@ -38,12 +45,14 @@ class AriaNotificationListener : NotificationListenerService() {
             return
         }
 
-        val key = "$pkg|$title|$text"
+        // Deduplicate repeated delivery without dropping legitimate identical messages.
+        val notificationKey = sbn.key.ifBlank { "$pkg|$title|$text" }
+        val key = "$notificationKey|$text"
         val now = System.currentTimeMillis()
         synchronized(seen) {
             if (seen[key]?.let { now - it < 12_000 } == true) return
             seen[key] = now
-            if (seen.size > 100) seen.remove(seen.keys.first())
+            if (seen.size > 200) seen.remove(seen.keys.first())
         }
 
         store.lastCapture = "$title: $text"
@@ -74,7 +83,7 @@ class AriaNotificationListener : NotificationListenerService() {
         // Burst gate: several messages arriving inside the configured delay window
         // become ONE reply job. All messages are already stored in conversation history,
         // so the eventual generation sees the complete burst as context.
-        val conversationKey = title
+        val conversationKey = "$pkg|$title"
         if (pendingReplies.containsKey(conversationKey) || inFlight.contains(conversationKey)) {
             store.logEvent("Coalesced message into pending reply for $title", null)
             return
@@ -90,9 +99,21 @@ class AriaNotificationListener : NotificationListenerService() {
                 // Read the latest conversation state at execution time so messages that
                 // arrived during the delay are included in the same reply context.
                 val history = store.recentContext(title)
-                val latest = history.lastOrNull { it.role == "user" } ?: return@schedule
-                val context = history.dropLast(1)
-                val result = AriaApi.generate(store, title, latest.text, context)
+                if (history.isEmpty()) return@schedule
+
+                // Everything received since the last Aria reply becomes ONE batch.
+                val lastAssistantIndex = history.indexOfLast { it.role == "assistant" }
+                val batchStart = if (lastAssistantIndex >= 0) lastAssistantIndex + 1 else 0
+
+                val pendingUserMessages = history.subList(batchStart, history.size)
+                    .filter { it.role == "user" && it.text.isNotBlank() }
+
+                if (pendingUserMessages.isEmpty()) return@schedule
+
+                val combinedMessage = pendingUserMessages.joinToString("\n") { it.text }
+                val context = history.take(batchStart).takeLast(10)
+
+                val result = AriaApi.generate(store, title, combinedMessage, context)
                 if (!result.ok || result.reply.isBlank()) {
                     store.lastError = "${result.error} (HTTP ${result.code})"
                     store.logEvent("AI generation failed: HTTP ${result.code}", false)
@@ -117,6 +138,15 @@ class AriaNotificationListener : NotificationListenerService() {
             }
         }, delay, TimeUnit.SECONDS)
         pendingReplies[conversationKey] = future
+    }
+
+    private fun isWhatsAppNotificationSummary(text: String): Boolean {
+        val normalized = text.trim().replace(Regex("\\s+"), " ")
+
+        return normalized.matches(Regex("(?i)\\d+\\s+new\\s+messages?")) ||
+            normalized.matches(Regex("(?i)\\d+\\s+messages?")) ||
+            normalized.equals("New message", ignoreCase = true) ||
+            normalized.equals("New messages", ignoreCase = true)
     }
 
     companion object {
