@@ -290,6 +290,17 @@ class MainActivity : Activity() {
             if (store.autoReply) "ACTIVE — Aria will auto-reply on WhatsApp" else "OFF — nothing will be sent automatically",
             if (store.autoReply) surfaceGreen else surface, R.drawable.ic_bolt) { navigate(3) })
 
+        val totalMsgs = store.history().size
+        val totalConvos = store.conversations().size
+        l.addView(infoCard("Total capture",
+            "$totalMsgs message${if (totalMsgs == 1) "" else "s"} captured across $totalConvos conversation${if (totalConvos == 1) "" else "s"}",
+            surface, R.drawable.ic_chat) { navigate(1) })
+
+        val allFollowUps = store.pendingFollowUps()
+        l.addView(infoCard("Follow-up tasks",
+            if (allFollowUps.isEmpty()) "None pending" else "${allFollowUps.size} pending — tap to view",
+            if (allFollowUps.isEmpty()) surface else surfaceGold, R.drawable.ic_bell) { navigate(7) })
+
         // ── Quick actions ─────────────────────────────────────────────────────
         l.addView(sec("Quick actions"))
         l.addView(actionRow("Test AI pipeline", R.drawable.ic_play, surface2) { runSyntheticTest() })
@@ -427,6 +438,10 @@ class MainActivity : Activity() {
     // ══════════════════════════════════════════════════════════════════════════
     private fun lab() {
         val l = shell("API Lab", "Test the AI pipeline directly. Nothing is sent to WhatsApp.")
+
+        l.addView(infoCard("Heads up",
+            "This only tests the AI prompt/response. It skips dedupe, group/contact filters, and the seen-gate — those only run on real WhatsApp notifications. Use \"Test AI pipeline\" on Home to exercise the full real path.",
+            surfaceGold, R.drawable.ic_info))
 
         // Provider badge
         val provRow = LinearLayout(this).apply {
@@ -877,7 +892,7 @@ class MainActivity : Activity() {
     // ══════════════════════════════════════════════════════════════════════════
     private fun systemPage() {
         val l = shell("System")
-        l.addView(infoCard("Version",     "V33 • Seen-gate • Contact Filter • Routines • Tag Follow-ups • Language Match", surfaceTeal, R.drawable.ic_info))
+        l.addView(infoCard("Version",     "V34 • Home Stats • Lab Clarity • Seen-gate • Contact Filter • Routines • Tag Follow-ups", surfaceTeal, R.drawable.ic_info))
         l.addView(infoCard("Security",    "API keys encrypted with Android Keystore AES-256-GCM. Notification text is untrusted input — never executed as instructions.", surface, R.drawable.ic_key))
         l.addView(infoCard("Pipeline",    "WA notification → dedup (key + content) → contact resolve → group/contact filter → burst engine → seen-gate → context window → AI generation → RemoteInput delivery → follow-up tag extraction.", surfaceGreen, R.drawable.ic_bolt))
         l.addView(infoCard("Design",      "Dark cocoa base • sage active states • muted teal secondary • terracotta errors. Claymorphism — rounded rectangular clay surfaces, no white canvas, no bento grid.", surface2, R.drawable.ic_palette))
