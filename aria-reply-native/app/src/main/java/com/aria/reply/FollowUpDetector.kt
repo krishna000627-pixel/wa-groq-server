@@ -7,6 +7,25 @@ package com.aria.reply
 object FollowUpDetector {
 
     /**
+     * Primary path: the system prompt instructs the model to emit a trailing
+     * `[[FOLLOWUP: ...]]` tag when (and only when) it makes a commitment. This strips
+     * that tag out of the visible reply and returns the commitment text alongside it.
+     * Falls back to regex-based [detect] on the cleaned text if no tag is present, so
+     * a custom/overridden system prompt still gets best-effort detection.
+     *
+     * @return Pair(replyTextWithTagRemoved, commitmentOrNull)
+     */
+    fun extractAndStrip(replyText: String): Pair<String, String?> {
+        val match = AriaStore.FOLLOWUP_TAG_PATTERN.find(replyText)
+        if (match != null) {
+            val cleaned = replyText.replace(match.value, "").trimEnd()
+            val commitment = match.groupValues.getOrNull(1)?.trim()?.take(160)
+            return cleaned to commitment.takeUnless { it.isNullOrBlank() }
+        }
+        return replyText to detect(replyText)
+    }
+
+    /**
      * Returns a non-null commitment description if [replyText] contains a commitment,
      * or null if no follow-up is needed.
      */

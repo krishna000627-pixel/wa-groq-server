@@ -71,9 +71,29 @@ class AriaNotificationListener : NotificationListenerService() {
         }
         val displaySender = resolvedName
 
+        // ── Content dedupe (catches WhatsApp reposting the same text under a ──
+        // new notification key, which the key-based check above misses) ───────
+        if (!synthetic && store.checkAndMarkSeenContent(displaySender, text)) {
+            store.logEvent("Deduplicated repeated message from $displaySender", null); return
+        }
+
+        // ── Group filter ────────────────────────────────────────────────────
+        val isGroup = notification.extras?.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false) == true
+        val groupBlocked = isGroup && !store.replyToGroups
+
+        // ── Contact exception filter ────────────────────────────────────────
+        val contactBlocked = !store.isAllowedByContactFilter(displaySender)
+
         store.lastCapture = "$displaySender: $text"
         store.addConversationMessage(displaySender, "user", text)
         store.logEvent("Captured ${if (synthetic) "synthetic" else "WhatsApp"} notification from $displaySender", null)
+
+        if (groupBlocked) {
+            store.logEvent("Skipped auto-reply — group replies are off ($displaySender)", null); return
+        }
+        if (contactBlocked) {
+            store.logEvent("Skipped auto-reply — $displaySender is filtered by contact rules (${store.contactFilterMode})", null); return
+        }
 
         // ── Optional WA notification suppression ──────────────────────────────
         if (isWhatsApp && store.suppressWaNotifications && !synthetic) {
@@ -113,6 +133,14 @@ class AriaNotificationListener : NotificationListenerService() {
             store.logEvent("Coalesced message into pending reply for $displaySender", null); return
         }
 
+        // ── Seen-gate ────────────────────────────────────────────────────────
+        // If Aria already replied to this sender and you haven't opened/cleared
+        // that chat yet (WhatsApp cancels the notification when you do), hold
+        // off replying again — the message is still captured above either way.
+        if (!synthetic && store.isPendingAck(conversationKey)) {
+            store.logEvent("Held reply — waiting for you to see the previous reply to $displaySender", null); return
+        }
+
         val delay = if (synthetic) 0L else store.minDelay.coerceAtLeast(0).toLong()
         val future = executor.schedule({
             pendingReplies.remove(conversationKey)
@@ -128,7 +156,9 @@ class AriaNotificationListener : NotificationListenerService() {
                     store.logEvent("AI generation failed: HTTP ${result.code}", false)
                     return@schedule
                 }
-                val reply = store.marker + result.reply
+                // ── Follow-up tag extraction (strips [[FOLLOWUP: ...]] before sending) ─
+                val (cleanedReply, commitment) = FollowUpDetector.extractAndStrip(result.reply)
+                val reply = store.marker + cleanedReply
 
                 // ── Deliver via RemoteInput ───────────────────────────────────
                 val results = Bundle().apply { putCharSequence(remoteInput.resultKey, reply) }
@@ -139,9 +169,9 @@ class AriaNotificationListener : NotificationListenerService() {
                     store.addConversationMessage(conversationKey, "assistant", reply)
                     store.lastError = ""
                     store.logEvent("Reply delivered through RemoteInput", true)
+                    if (!synthetic) store.setPendingAck(conversationKey, true)
 
-                    // ── Follow-up detection ───────────────────────────────────
-                    val commitment = FollowUpDetector.detect(result.reply)
+                    // ── Follow-up tracking ─────────────────────────────────────
                     if (commitment != null) {
                         store.addFollowUp(conversationKey, commitment)
                         store.logEvent("Follow-up task created: $commitment", null)
@@ -156,6 +186,24 @@ class AriaNotificationListener : NotificationListenerService() {
             }
         }, delay, TimeUnit.SECONDS)
         pendingReplies[conversationKey] = future
+    }
+
+    /**
+     * Fires when a notification is cleared — either you opened the chat (WhatsApp
+     * cancels its notification when the thread is read) or swiped it away. Either way,
+     * treat it as "seen" and re-arm auto-reply for that sender (see the seen-gate above).
+     */
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        val pkg = sbn.packageName
+        val isWhatsApp = pkg == "com.whatsapp" || pkg == "com.whatsapp.w4b"
+        if (!isWhatsApp) return
+        val title = sbn.notification?.extras?.getString("android.title")?.trim().orEmpty()
+        if (title.isBlank() || title.equals("You", ignoreCase = true)) return
+        val displaySender = ContactResolver.resolve(this, title)
+        if (store.isPendingAck(displaySender)) {
+            store.setPendingAck(displaySender, false)
+            store.logEvent("Marked $displaySender as seen — auto-reply re-armed", null)
+        }
     }
 
     // ── Aria summary notification (replaces suppressed WA notification) ───────
@@ -233,6 +281,19 @@ class AriaNotificationListener : NotificationListenerService() {
 
         // WhatsApp summary lines like "3 new messages" or "2 new messages from John"
         private val SUMMARY_PATTERN = Regex("^\\d+\\s+new messages?(?:\\s+from\\s+.+)?$", RegexOption.IGNORE_CASE)
+
+        /**
+         * "Die catcher" — forces Android to rebind the listener if the OS unbound it
+         * (common on aggressive-battery-management OEM ROMs, which can silently drop
+         * the listener so notifications stop being captured even though the toggle
+         * looks fine). Safe to call anytime; requestRebind() is a no-op if already bound.
+         */
+        fun rebind(context: Context) {
+            runCatching {
+                NotificationListenerService.requestRebind(android.content.ComponentName(context, AriaNotificationListener::class.java))
+                AriaStore(context).logEvent("Requested notification listener rebind", null)
+            }
+        }
 
         fun sendDirectReply(context: Context, reply: String): Boolean {
             val action = lastReplyAction ?: return false

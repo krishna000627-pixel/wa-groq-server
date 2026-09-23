@@ -2,6 +2,9 @@ package com.aria.reply
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -64,6 +67,20 @@ class MainActivity : Activity() {
         if (openScreen >= 0) screen = openScreen
         bindNav()
         render()
+        scheduleWatchdog()
+    }
+
+    /** Schedules the periodic "die catcher" alarm that re-requests listener rebind. */
+    private fun scheduleWatchdog() {
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pi = PendingIntent.getBroadcast(
+            this, 0,
+            Intent(this, BootReceiver::class.java).setAction(BootReceiver.ACTION_WATCHDOG),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        runCatching {
+            am.setInexactRepeating(AlarmManager.ELAPSED_REALTIME, android.os.SystemClock.elapsedRealtime() + 15 * 60_000L, 15 * 60_000L, pi)
+        }
     }
 
     override fun onResume() {
@@ -267,6 +284,11 @@ class MainActivity : Activity() {
             addView(tv("${store.provider.uppercase()} • ${activeModel()}", 12f, muted))
         }
         l.addView(hero)
+
+        // ── Global status ─────────────────────────────────────────────────────
+        l.addView(infoCard("Global replies",
+            if (store.autoReply) "ACTIVE — Aria will auto-reply on WhatsApp" else "OFF — nothing will be sent automatically",
+            if (store.autoReply) surfaceGreen else surface, R.drawable.ic_bolt) { navigate(3) })
 
         // ── Quick actions ─────────────────────────────────────────────────────
         l.addView(sec("Quick actions"))
@@ -526,6 +548,66 @@ class MainActivity : Activity() {
         }
         l.addView(supSw)
 
+        val groupSw = Switch(this).apply {
+            text = if (store.replyToGroups) "Reply to Groups  ON" else "Reply to Groups  OFF"
+            setTextColor(muted); textSize = 13f; isChecked = store.replyToGroups
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(4), 0, dp(4)) }
+            setOnCheckedChangeListener { _, c ->
+                store.replyToGroups = c
+                text = if (c) "Reply to Groups  ON" else "Reply to Groups  OFF"
+            }
+        }
+        l.addView(groupSw)
+
+        // ── Contact filter ───────────────────────────────────────────────────────
+        l.addView(sec("Contact Filter"))
+        l.addView(tv("Choose who Aria is allowed to auto-reply to.", 12f, muted).apply { setPadding(0, 0, 0, dp(6)) })
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = shape(surface, 13)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            layoutParams = LinearLayout.LayoutParams(-1, dp(48)).apply { setMargins(0, dp(4), 0, dp(4)) }
+        }
+        val allBtn   = tv("ALL", 12f, ink).apply { typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(0, -1, 1f) }
+        val blockBtn = tv("BLOCKLIST", 12f, muted).apply { typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(0, -1, 1f) }
+        val whiteBtn = tv("WHITELIST", 12f, muted).apply { typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(0, -1, 1f) }
+        fun syncFilterMode() {
+            val mode = store.contactFilterMode
+            allBtn.background   = shape(if (mode == "NONE") surfaceGreen else surface, 10)
+            blockBtn.background = shape(if (mode == "BLOCKLIST") surfaceRed else surface, 10)
+            whiteBtn.background = shape(if (mode == "WHITELIST") surfaceTeal else surface, 10)
+            allBtn.setTextColor(if (mode == "NONE") ink else muted)
+            blockBtn.setTextColor(if (mode == "BLOCKLIST") ink else muted)
+            whiteBtn.setTextColor(if (mode == "WHITELIST") ink else muted)
+        }
+        allBtn.setOnClickListener   { store.contactFilterMode = "NONE";      render() }
+        blockBtn.setOnClickListener { store.contactFilterMode = "BLOCKLIST"; render() }
+        whiteBtn.setOnClickListener { store.contactFilterMode = "WHITELIST"; render() }
+        filterRow.addView(allBtn); filterRow.addView(blockBtn); filterRow.addView(whiteBtn); syncFilterMode()
+        l.addView(filterRow)
+
+        if (store.contactFilterMode != "NONE") {
+            val label = if (store.contactFilterMode == "BLOCKLIST") "Never reply to:" else "Only reply to:"
+            l.addView(tv(label, 11f, muted).apply { setPadding(0, dp(6), 0, dp(2)) })
+            store.contactExceptions().sorted().forEach { name ->
+                val c = card(surface2) {
+                    val row = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
+                    row.addView(tv(name, 13f, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                    row.addView(tv("✕", 15f, terracotta))
+                    addView(row)
+                }
+                c.setOnClickListener { store.removeContactException(name); toast("Removed"); render() }
+                l.addView(c)
+            }
+            val exceptionField = field("Contact name (exactly as it appears in Chats)")
+            l.addView(exceptionField)
+            l.addView(actionRow("Add to list", R.drawable.ic_save, surface2) {
+                val n = exceptionField.text.toString().trim()
+                if (n.isBlank()) { toast("Enter a name"); return@actionRow }
+                store.addContactException(n); toast("Added"); render()
+            })
+        }
+
         // ── Provider ──────────────────────────────────────────────────────────
         l.addView(sec("AI Provider"))
         val provRow = LinearLayout(this).apply {
@@ -574,6 +656,64 @@ class MainActivity : Activity() {
         val maxField    = field("Max delay (s)", store.maxDelay.toString()).apply { inputType = InputType.TYPE_CLASS_NUMBER }
         l.addView(promptField); l.addView(markerField); l.addView(minField); l.addView(maxField)
 
+        // ── Conversation timing ──────────────────────────────────────────────────
+        l.addView(sec("Conversation Timing"))
+        l.addView(tv("If nobody has messaged in longer than the gap below, Aria opens with the introduction. Otherwise it just replies normally.", 12f, muted).apply { setPadding(0, 0, 0, dp(6)) })
+        val introField = field("Introduction message", store.introMessage, multi = true)
+        val gapField   = field("Re-intro gap (hours)", store.reIntroGapHours.toString()).apply { inputType = InputType.TYPE_CLASS_NUMBER }
+        l.addView(introField); l.addView(gapField)
+
+        // ── Routine ───────────────────────────────────────────────────────────────
+        l.addView(sec("Routine"))
+        l.addView(tv("Tell Aria what you're usually doing at certain times, so it can decide whether to say you're busy.", 12f, muted).apply { setPadding(0, 0, 0, dp(6)) })
+        store.routines().forEach { r ->
+            val c = card(surface) {
+                val row = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
+                val col = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                }
+                col.addView(tv(r.label, 14f, ink).apply { typeface = Typeface.DEFAULT_BOLD })
+                col.addView(tv("${minToHHmm(r.startMinutes)} – ${minToHHmm(r.endMinutes)}", 12f, muted).apply { setPadding(0, dp(2), 0, 0) })
+                row.addView(col)
+                row.addView(tv("✕", 16f, terracotta))
+                addView(row)
+            }
+            c.setOnClickListener { store.removeRoutine(r.id); toast("Removed"); render() }
+            l.addView(c)
+        }
+        var newStart = 9 * 60
+        var newEnd = 17 * 60
+        val routineLabelField = field("Routine label (e.g. College, Sleep, Gym)")
+        val startBtn = tv("Start: ${minToHHmm(newStart)}", 13f, ink).apply {
+            background = shape(surface2, 12); setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        val endBtn = tv("End: ${minToHHmm(newEnd)}", 13f, ink).apply {
+            background = shape(surface2, 12); setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        startBtn.setOnClickListener {
+            TimePickerDialog(this, { _, hh, mm -> newStart = hh * 60 + mm; startBtn.text = "Start: ${minToHHmm(newStart)}" },
+                newStart / 60, newStart % 60, true).show()
+        }
+        endBtn.setOnClickListener {
+            TimePickerDialog(this, { _, hh, mm -> newEnd = hh * 60 + mm; endBtn.text = "End: ${minToHHmm(newEnd)}" },
+                newEnd / 60, newEnd % 60, true).show()
+        }
+        l.addView(routineLabelField)
+        val timeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(4), 0, dp(4)) }
+        }
+        timeRow.addView(startBtn, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
+        timeRow.addView(endBtn, LinearLayout.LayoutParams(0, -2, 1f))
+        l.addView(timeRow)
+        l.addView(actionRow("Add routine", R.drawable.ic_save, surfaceTeal) {
+            val label = routineLabelField.text.toString().trim()
+            if (label.isBlank()) { toast("Enter a label"); return@actionRow }
+            store.addRoutine(label, newStart, newEnd)
+            toast("Routine added"); render()
+        })
+
         // Save
         l.addView(sec("Save"))
         l.addView(actionRow("Save all settings", R.drawable.ic_save, surfaceGreen) {
@@ -588,6 +728,9 @@ class MainActivity : Activity() {
             store.marker               = markerField.text.toString()
             store.minDelay             = (minField.text.toString().toIntOrNull() ?: 2).coerceAtLeast(0)
             store.maxDelay             = (maxField.text.toString().toIntOrNull() ?: 5).coerceAtLeast(store.minDelay)
+            store.replyToGroups        = groupSw.isChecked
+            store.introMessage         = introField.text.toString().trim().ifBlank { AriaStore.DEFAULT_INTRO }
+            store.reIntroGapHours      = (gapField.text.toString().toIntOrNull() ?: 5).coerceAtLeast(0)
             store.logEvent("Settings saved", true); toast("Saved ✓"); render()
         })
         l.addView(actionRow("Reset system prompt", R.drawable.ic_reset, surface2) {
@@ -602,6 +745,10 @@ class MainActivity : Activity() {
         l.addView(actionRow("Notification Access", R.drawable.ic_bell, surface2) { openNotifAccess() })
         l.addView(actionRow("Battery Optimization", R.drawable.ic_bolt, surface2) { reqBattery() })
         l.addView(actionRow("Contacts (${if (store.contactsPermissionGranted) "granted" else "not granted"})", R.drawable.ic_info, surface2) { reqContacts() })
+        l.addView(actionRow("Restart Notification Listener", R.drawable.ic_reset, surface2) {
+            AriaNotificationListener.rebind(this); toast("Requested — give it a few seconds")
+        })
+        l.addView(tv("If messages stop being captured (common on some phones' battery savers, or with the ringer on silent), tap the restart above, or open your phone's App Info → Battery for Aria and WhatsApp and allow unrestricted background activity / autostart.", 11f, muted).apply { setPadding(0, dp(6), 0, 0) })
 
         // Diagnostics link
         l.addView(sec("More"))
@@ -730,9 +877,9 @@ class MainActivity : Activity() {
     // ══════════════════════════════════════════════════════════════════════════
     private fun systemPage() {
         val l = shell("System")
-        l.addView(infoCard("Version",     "V28 • Follow-up Core • Contact Core • Notification Core", surfaceTeal, R.drawable.ic_info))
+        l.addView(infoCard("Version",     "V33 • Seen-gate • Contact Filter • Routines • Tag Follow-ups • Language Match", surfaceTeal, R.drawable.ic_info))
         l.addView(infoCard("Security",    "API keys encrypted with Android Keystore AES-256-GCM. Notification text is untrusted input — never executed as instructions.", surface, R.drawable.ic_key))
-        l.addView(infoCard("Pipeline",    "WA notification → dedup by key → contact resolve → burst engine → context window → AI generation → RemoteInput delivery → follow-up detection.", surfaceGreen, R.drawable.ic_bolt))
+        l.addView(infoCard("Pipeline",    "WA notification → dedup (key + content) → contact resolve → group/contact filter → burst engine → seen-gate → context window → AI generation → RemoteInput delivery → follow-up tag extraction.", surfaceGreen, R.drawable.ic_bolt))
         l.addView(infoCard("Design",      "Dark cocoa base • sage active states • muted teal secondary • terracotta errors. Claymorphism — rounded rectangular clay surfaces, no white canvas, no bento grid.", surface2, R.drawable.ic_palette))
         l.addView(infoCard("Compatibility","Android 8+ (API 26+). WA direct replies require WhatsApp to expose a RemoteInput action on the notification.", surface, R.drawable.ic_info))
         l.addView(sec("Actions"))
@@ -777,5 +924,6 @@ class MainActivity : Activity() {
     }
     private fun reqContacts() = ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CONTACTS), REQ_CONTACTS)
     private fun formatTime(ts: Long) = SimpleDateFormat("dd MMM • HH:mm", Locale.getDefault()).format(Date(ts))
+    private fun minToHHmm(m: Int) = String.format(Locale.getDefault(), "%02d:%02d", (m / 60) % 24, m % 60)
     private fun toast(t: String) = Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
 }
