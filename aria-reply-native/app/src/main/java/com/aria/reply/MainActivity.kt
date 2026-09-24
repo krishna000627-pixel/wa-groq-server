@@ -887,36 +887,38 @@ class MainActivity : Activity() {
             val realPending = pending.filter { !isTestSender(it.sender) }
             val testPending = pending.filter { isTestSender(it.sender) }
 
-            fun renderTaskCard(task: AriaStore.FollowUpTask) {
+            fun renderContactBox(sender: String, contactTasks: List<AriaStore.FollowUpTask>) {
+                val resolved = store.resolvedName(sender)
+                val display = if (resolved != sender) resolved else sender
+                val newest = contactTasks.maxByOrNull { it.createdAt }
                 val c = card(surfaceGold) {
                     val row = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
-                    row.addView(tv("□  ", 18f, gold))
                     val col = LinearLayout(this@MainActivity).apply {
                         orientation = LinearLayout.VERTICAL
                         layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
                     }
-                    col.addView(tv(task.commitment, 14f, ink))
-                    col.addView(tv(formatTime(task.createdAt), 9f, muted).apply { setPadding(0, dp(3), 0, 0) })
+                    col.addView(tv(display, 15f, ink).apply { typeface = Typeface.DEFAULT_BOLD })
+                    col.addView(tv("${contactTasks.size} follow-up${if (contactTasks.size == 1) "" else "s"} pending", 11f, muted).apply { setPadding(0, dp(2), 0, 0) })
+                    if (newest != null) col.addView(tv(newest.commitment, 13f, ink).apply { setPadding(0, dp(4), 0, 0) })
                     row.addView(col)
+                    row.addView(tv("›", 18f, muted))
                     addView(row)
                 }
-                c.setOnClickListener { store.markFollowUpDone(task.id); FollowUpNotifier.refresh(this); toast("Done ✓"); render() }
+                c.setOnClickListener { selectedChat = sender; navigate(5) }
                 l.addView(c)
             }
 
             if (realPending.isNotEmpty()) {
-                l.addView(sec("Pending (${realPending.size}) — grouped by contact, tap to mark done"))
+                l.addView(sec("Pending (${realPending.size}) — tap a contact to view/complete"))
                 realPending.groupBy { it.sender }.toSortedMap(compareBy { it.lowercase() }).forEach { (sender, contactTasks) ->
-                    l.addView(tv(sender, 12f, sage).apply { typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(8), 0, dp(2)) })
-                    contactTasks.forEach { renderTaskCard(it) }
+                    renderContactBox(sender, contactTasks)
                 }
             }
 
             if (testPending.isNotEmpty()) {
-                l.addView(sec("Test data (${testPending.size}) — from Lab / synthetic tests, not real contacts"))
+                l.addView(sec("Test data — from Lab / synthetic tests, not real contacts"))
                 testPending.groupBy { it.sender }.forEach { (sender, contactTasks) ->
-                    l.addView(tv(sender, 12f, muted).apply { typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(8), 0, dp(2)) })
-                    contactTasks.forEach { renderTaskCard(it) }
+                    renderContactBox(sender, contactTasks)
                 }
             }
 
@@ -951,7 +953,7 @@ class MainActivity : Activity() {
     // ══════════════════════════════════════════════════════════════════════════
     private fun systemPage() {
         val l = shell("System")
-        l.addView(infoCard("Version",     "V38 • Grouped follow-ups by contact • No duplicate tasks per sender • Leaner Home/Lab/Diagnostics", surfaceTeal, R.drawable.ic_info))
+        l.addView(infoCard("Version",     "V39 • Follow-ups now shows one box per contact — tap opens that contact's page", surfaceTeal, R.drawable.ic_info))
         l.addView(infoCard("Security",    "API keys encrypted with Android Keystore AES-256-GCM. Notification text is untrusted input — never executed as instructions.", surface, R.drawable.ic_key))
         l.addView(infoCard("Pipeline",    "WA notification → dedup (key + content) → contact resolve → group/contact filter → burst engine → seen-gate → context window → AI generation → RemoteInput delivery → follow-up tag extraction.", surfaceGreen, R.drawable.ic_bolt))
         l.addView(infoCard("Design",      "Dark cocoa base • sage active states • muted teal secondary • terracotta errors. Claymorphism — rounded rectangular clay surfaces, no white canvas, no bento grid.", surface2, R.drawable.ic_palette))
