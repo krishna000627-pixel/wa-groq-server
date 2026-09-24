@@ -14,6 +14,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
+import android.provider.ContactsContract
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -33,6 +34,7 @@ class MainActivity : Activity() {
     private var screen = 0
     private var selectedChat = ""
     private var lastApiResult: String = ""   // live result shown in Lab
+    private var lastApiFollowUpPreview: String = ""
     private var lastApiError:  String = ""
     private var lastApiRaw:    String = ""
 
@@ -54,8 +56,9 @@ class MainActivity : Activity() {
 
     // nav-tab screen indices that correspond to bottom tabs
     private val tabScreens = listOf(0, 1, 2, 3, 4)
+    private val backStack = ArrayDeque<Int>()
 
-    companion object { private const val REQ_CONTACTS = 2001 }
+    companion object { private const val REQ_CONTACTS = 2001; private const val REQ_PICK_CONTACT = 2002 }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +102,29 @@ class MainActivity : Activity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_PICK_CONTACT || resultCode != Activity.RESULT_OK) return
+        val uri = data?.data ?: return
+        contentResolver.query(uri, arrayOf(ContactsContract.Contacts.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val name = c.getString(0)?.trim().orEmpty()
+                if (name.isNotBlank()) {
+                    store.addContactException(name)
+                    toast("Added $name"); render()
+                }
+            }
+        }
+    }
+
+    private fun pickContact() {
+        if (!store.contactsPermissionGranted) { reqContacts(); toast("Grant Contacts access first"); return }
+        runCatching {
+            startActivityForResult(Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI), REQ_PICK_CONTACT)
+        }.onFailure { toast("Couldn't open Contacts") }
+    }
+
     // ── Nav binding ───────────────────────────────────────────────────────────
     private fun bindNav() {
         findViewById<View>(R.id.navHome).setOnClickListener     { navigate(0) }
@@ -108,7 +134,19 @@ class MainActivity : Activity() {
         findViewById<View>(R.id.navSystem).setOnClickListener   { navigate(4) }
     }
 
-    private fun navigate(s: Int) { screen = s; render() }
+    private fun navigate(s: Int) {
+        if (s != screen) {
+            backStack.addLast(screen)
+            if (backStack.size > 20) backStack.removeFirst()
+        }
+        screen = s; render()
+    }
+
+    /** Back button navigates within the app's own history instead of exiting straight to the launcher. */
+    override fun onBackPressed() {
+        if (backStack.isNotEmpty()) { screen = backStack.removeLast(); render() }
+        else super.onBackPressed()
+    }
 
     /** Tint the active tab sage, others muted. */
     private fun refreshNav() {
@@ -145,9 +183,18 @@ class MainActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(dp(size), dp(size))
     }
 
+    private var renderedScreen = -1
+    private var savedScroll = 0
+
     private fun show(v: LinearLayout) {
+        val prevSv = page.getChildAt(0) as? ScrollView
+        val samePage = renderedScreen == screen
+        if (prevSv != null && samePage) savedScroll = prevSv.scrollY
         page.removeAllViews()
-        page.addView(ScrollView(this).apply { isFillViewport = true; addView(v) })
+        val sv = ScrollView(this).apply { isFillViewport = true; addView(v) }
+        page.addView(sv)
+        if (samePage) sv.post { sv.scrollTo(0, savedScroll) }
+        renderedScreen = screen
         refreshNav()
     }
 
@@ -305,6 +352,7 @@ class MainActivity : Activity() {
         l.addView(sec("Quick actions"))
         l.addView(actionRow("Test AI pipeline", R.drawable.ic_play, surface2) { runSyntheticTest() })
         l.addView(actionRow("Open API Lab", R.drawable.ic_api, surfaceTeal) { navigate(2) })
+        l.addView(actionRow("Edit Routine / Contact Filter", R.drawable.ic_bell, surface2) { navigate(3) })
 
         // ── Pending follow-ups ────────────────────────────────────────────────
         val pending = store.pendingFollowUps()
@@ -372,7 +420,7 @@ class MainActivity : Activity() {
                     row.addView(tv("›", 18f, muted))
                     addView(row)
                 }
-                c.setOnClickListener { selectedChat = name; screen = 5; render() }
+                c.setOnClickListener { selectedChat = name; navigate(5) }
                 l.addView(c)
             }
         }
@@ -494,14 +542,17 @@ class MainActivity : Activity() {
                 val r = AriaApi.generate(store, who, msg, ctx)
                 runOnUiThread {
                     if (r.ok) {
-                        lastApiResult = r.reply
+                        val (cleaned, commitment) = FollowUpDetector.extractAndStrip(r.reply)
+                        lastApiResult = cleaned
+                        lastApiFollowUpPreview = commitment.orEmpty()
                         lastApiError  = ""
                         lastApiRaw    = r.raw
-                        store.lastReply = r.reply
+                        store.lastReply = cleaned
                         store.lastError = ""
                         store.logEvent("Lab API test passed", true)
                     } else {
                         lastApiResult = ""
+                        lastApiFollowUpPreview = ""
                         lastApiError  = "${r.error} (HTTP ${r.code})"
                         lastApiRaw    = r.raw.take(600)
                         store.lastError = lastApiError
@@ -519,6 +570,12 @@ class MainActivity : Activity() {
             l.addView(card(surfaceGreen) {
                 addView(tv(lastApiResult, 15f, ink))
             })
+            if (lastApiFollowUpPreview.isNotBlank()) {
+                l.addView(card(surfaceGold) {
+                    addView(tv("FOLLOW-UP DETECTED — preview only, Lab doesn't save it", 10f, gold).apply { typeface = Typeface.DEFAULT_BOLD })
+                    addView(tv(lastApiFollowUpPreview, 13f, ink).apply { setPadding(0, dp(4), 0, 0) })
+                })
+            }
         }
         if (lastApiError.isNotBlank()) {
             l.addView(sec("Error"))
@@ -616,12 +673,64 @@ class MainActivity : Activity() {
             }
             val exceptionField = field("Contact name (exactly as it appears in Chats)")
             l.addView(exceptionField)
-            l.addView(actionRow("Add to list", R.drawable.ic_save, surface2) {
+            l.addView(actionRow("Pick from Contacts", R.drawable.ic_info, surfaceTeal) { pickContact() })
+            l.addView(actionRow("Add typed name to list", R.drawable.ic_save, surface2) {
                 val n = exceptionField.text.toString().trim()
                 if (n.isBlank()) { toast("Enter a name"); return@actionRow }
                 store.addContactException(n); toast("Added"); render()
             })
         }
+
+        // ── Routine ───────────────────────────────────────────────────────────────
+        l.addView(sec("Routine"))
+        l.addView(tv("Tell Aria what you're usually doing at certain times, so it can decide whether to say you're busy.", 12f, muted).apply { setPadding(0, 0, 0, dp(6)) })
+        store.routines().forEach { r ->
+            val c = card(surface) {
+                val row = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
+                val col = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                }
+                col.addView(tv(r.label, 14f, ink).apply { typeface = Typeface.DEFAULT_BOLD })
+                col.addView(tv("${minToHHmm(r.startMinutes)} – ${minToHHmm(r.endMinutes)}", 12f, muted).apply { setPadding(0, dp(2), 0, 0) })
+                row.addView(col)
+                row.addView(tv("✕", 16f, terracotta))
+                addView(row)
+            }
+            c.setOnClickListener { store.removeRoutine(r.id); toast("Removed"); render() }
+            l.addView(c)
+        }
+        var newStart = 9 * 60
+        var newEnd = 17 * 60
+        val routineLabelField = field("Routine label (e.g. College, Sleep, Gym)")
+        val startBtn = tv("Start: ${minToHHmm(newStart)}", 13f, ink).apply {
+            background = shape(surface2, 12); setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        val endBtn = tv("End: ${minToHHmm(newEnd)}", 13f, ink).apply {
+            background = shape(surface2, 12); setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        startBtn.setOnClickListener {
+            TimePickerDialog(this, { _, hh, mm -> newStart = hh * 60 + mm; startBtn.text = "Start: ${minToHHmm(newStart)}" },
+                newStart / 60, newStart % 60, true).show()
+        }
+        endBtn.setOnClickListener {
+            TimePickerDialog(this, { _, hh, mm -> newEnd = hh * 60 + mm; endBtn.text = "End: ${minToHHmm(newEnd)}" },
+                newEnd / 60, newEnd % 60, true).show()
+        }
+        l.addView(routineLabelField)
+        val timeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(4), 0, dp(4)) }
+        }
+        timeRow.addView(startBtn, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
+        timeRow.addView(endBtn, LinearLayout.LayoutParams(0, -2, 1f))
+        l.addView(timeRow)
+        l.addView(actionRow("Add routine", R.drawable.ic_save, surfaceTeal) {
+            val label = routineLabelField.text.toString().trim()
+            if (label.isBlank()) { toast("Enter a label"); return@actionRow }
+            store.addRoutine(label, newStart, newEnd)
+            toast("Routine added"); render()
+        })
 
         // ── Provider ──────────────────────────────────────────────────────────
         l.addView(sec("AI Provider"))
@@ -678,57 +787,6 @@ class MainActivity : Activity() {
         val gapField   = field("Re-intro gap (hours)", store.reIntroGapHours.toString()).apply { inputType = InputType.TYPE_CLASS_NUMBER }
         l.addView(introField); l.addView(gapField)
 
-        // ── Routine ───────────────────────────────────────────────────────────────
-        l.addView(sec("Routine"))
-        l.addView(tv("Tell Aria what you're usually doing at certain times, so it can decide whether to say you're busy.", 12f, muted).apply { setPadding(0, 0, 0, dp(6)) })
-        store.routines().forEach { r ->
-            val c = card(surface) {
-                val row = LinearLayout(this@MainActivity).apply { gravity = Gravity.CENTER_VERTICAL }
-                val col = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-                }
-                col.addView(tv(r.label, 14f, ink).apply { typeface = Typeface.DEFAULT_BOLD })
-                col.addView(tv("${minToHHmm(r.startMinutes)} – ${minToHHmm(r.endMinutes)}", 12f, muted).apply { setPadding(0, dp(2), 0, 0) })
-                row.addView(col)
-                row.addView(tv("✕", 16f, terracotta))
-                addView(row)
-            }
-            c.setOnClickListener { store.removeRoutine(r.id); toast("Removed"); render() }
-            l.addView(c)
-        }
-        var newStart = 9 * 60
-        var newEnd = 17 * 60
-        val routineLabelField = field("Routine label (e.g. College, Sleep, Gym)")
-        val startBtn = tv("Start: ${minToHHmm(newStart)}", 13f, ink).apply {
-            background = shape(surface2, 12); setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        val endBtn = tv("End: ${minToHHmm(newEnd)}", 13f, ink).apply {
-            background = shape(surface2, 12); setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        startBtn.setOnClickListener {
-            TimePickerDialog(this, { _, hh, mm -> newStart = hh * 60 + mm; startBtn.text = "Start: ${minToHHmm(newStart)}" },
-                newStart / 60, newStart % 60, true).show()
-        }
-        endBtn.setOnClickListener {
-            TimePickerDialog(this, { _, hh, mm -> newEnd = hh * 60 + mm; endBtn.text = "End: ${minToHHmm(newEnd)}" },
-                newEnd / 60, newEnd % 60, true).show()
-        }
-        l.addView(routineLabelField)
-        val timeRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(4), 0, dp(4)) }
-        }
-        timeRow.addView(startBtn, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
-        timeRow.addView(endBtn, LinearLayout.LayoutParams(0, -2, 1f))
-        l.addView(timeRow)
-        l.addView(actionRow("Add routine", R.drawable.ic_save, surfaceTeal) {
-            val label = routineLabelField.text.toString().trim()
-            if (label.isBlank()) { toast("Enter a label"); return@actionRow }
-            store.addRoutine(label, newStart, newEnd)
-            toast("Routine added"); render()
-        })
-
         // Save
         l.addView(sec("Save"))
         l.addView(actionRow("Save all settings", R.drawable.ic_save, surfaceGreen) {
@@ -767,7 +825,7 @@ class MainActivity : Activity() {
 
         // Diagnostics link
         l.addView(sec("More"))
-        l.addView(actionRow("Full Diagnostics", R.drawable.ic_activity, surface2) { screen = 6; render() })
+        l.addView(actionRow("Full Diagnostics", R.drawable.ic_activity, surface2) { navigate(6) })
         l.addView(actionRow("Follow-up Tasks", R.drawable.ic_bell, surfaceGold) { navigate(7) })
 
         show(l)
@@ -777,7 +835,7 @@ class MainActivity : Activity() {
     // SCREEN 6 — DIAGNOSTICS (sub-page from Settings)
     // ══════════════════════════════════════════════════════════════════════════
     private fun diagnostics() {
-        val l = shell("Diagnostics", "", back = { screen = 3; render() })
+        val l = shell("Diagnostics", "", back = { navigate(3) })
 
         l.addView(infoCard("Notification Access",
             if (hasNotifAccess()) "Connected" else "Not granted — tap to open",
@@ -810,8 +868,19 @@ class MainActivity : Activity() {
             if (err.isBlank()) surface else surfaceRed, R.drawable.ic_warning))
 
         l.addView(sec("Actions"))
-        l.addView(actionRow("Post synthetic test",     R.drawable.ic_play,  terracotta)  { runSyntheticTest() })
+        l.addView(tv("Runs the exact real capture pipeline (dedupe, group/contact filters, seen-gate) using a fake notification — the closest thing to a live WhatsApp test.", 12f, muted).apply { setPadding(0, 0, 0, dp(6)) })
+        val testSenderField = field("Test sender name", "Aria Test Contact")
+        val testGroupSw = Switch(this).apply {
+            text = "Simulate as a group message"
+            setTextColor(muted); textSize = 13f
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(4), 0, dp(8)) }
+        }
+        l.addView(testSenderField); l.addView(testGroupSw)
+        l.addView(actionRow("Post synthetic test",     R.drawable.ic_play,  terracotta)  {
+            runSyntheticTest(testSenderField.text.toString().trim().ifBlank { "Aria Test Contact" }, testGroupSw.isChecked)
+        })
         l.addView(actionRow("Direct RemoteInput test", R.drawable.ic_reply, surfaceTeal) { directReplyTest() })
+        l.addView(tv("To confirm groups are actually excluded: turn OFF \"Reply to Groups\" in Settings, run this with the switch above ON, then check the Event Log below for \"Skipped auto-reply — group replies are off\". Same idea for Contact Filter — set a BLOCKLIST/WHITELIST name that matches the sender above.", 11f, muted).apply { setPadding(0, dp(6), 0, 0) })
 
         l.addView(sec("Event Log"))
         store.events().take(15).forEach { raw ->
@@ -892,18 +961,18 @@ class MainActivity : Activity() {
     // ══════════════════════════════════════════════════════════════════════════
     private fun systemPage() {
         val l = shell("System")
-        l.addView(infoCard("Version",     "V34 • Home Stats • Lab Clarity • Seen-gate • Contact Filter • Routines • Tag Follow-ups", surfaceTeal, R.drawable.ic_info))
+        l.addView(infoCard("Version",     "V35 • Back Navigation • Scroll Fix • Contact Picker • Lab Tag Fix • Testable Filters", surfaceTeal, R.drawable.ic_info))
         l.addView(infoCard("Security",    "API keys encrypted with Android Keystore AES-256-GCM. Notification text is untrusted input — never executed as instructions.", surface, R.drawable.ic_key))
         l.addView(infoCard("Pipeline",    "WA notification → dedup (key + content) → contact resolve → group/contact filter → burst engine → seen-gate → context window → AI generation → RemoteInput delivery → follow-up tag extraction.", surfaceGreen, R.drawable.ic_bolt))
         l.addView(infoCard("Design",      "Dark cocoa base • sage active states • muted teal secondary • terracotta errors. Claymorphism — rounded rectangular clay surfaces, no white canvas, no bento grid.", surface2, R.drawable.ic_palette))
         l.addView(infoCard("Compatibility","Android 8+ (API 26+). WA direct replies require WhatsApp to expose a RemoteInput action on the notification.", surface, R.drawable.ic_info))
         l.addView(sec("Actions"))
-        l.addView(actionRow("Full Diagnostics", R.drawable.ic_activity, surface2) { screen = 6; render() })
+        l.addView(actionRow("Full Diagnostics", R.drawable.ic_activity, surface2) { navigate(6) })
         show(l)
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    private fun runSyntheticTest() {
+    private fun runSyntheticTest(sender: String = "Aria Test Contact", isGroup: Boolean = false) {
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
@@ -912,9 +981,9 @@ class MainActivity : Activity() {
         if (!hasNotifAccess()) { openNotifAccess(); toast("Grant Notification Access then try again"); return }
         if (!store.hasApiKey()) { navigate(3); toast("Add an API key first"); return }
         store.lastError = ""; store.lastTargetReady = false
-        store.logEvent("Synthetic test posted", null)
-        AriaTestNotification.post(this, "Aria Test Contact", "Hello Aria, this is a synthetic capture test.")
-        toast("Test message posted"); screen = 6; render()
+        store.logEvent("Synthetic test posted${if (isGroup) " (simulated group)" else ""} — sender: $sender", null)
+        AriaTestNotification.post(this, sender, "Hello Aria, this is a synthetic capture test.", isGroup)
+        toast("Test message posted — check Event Log below"); navigate(6)
     }
 
     private fun directReplyTest() {

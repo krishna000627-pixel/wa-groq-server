@@ -13,7 +13,7 @@ object AriaTestNotification {
     const val RESULT_KEY = "aria_test_reply"
     const val NOTIFICATION_ID = 2301
 
-    fun post(context: Context, sender: String, message: String) {
+    fun post(context: Context, sender: String, message: String, isGroup: Boolean = false) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Aria Test", NotificationManager.IMPORTANCE_HIGH))
         val replyIntent = Intent(context, AriaTestReceiver::class.java).setPackage(context.packageName)
@@ -25,7 +25,10 @@ object AriaTestNotification {
             .setContentTitle(sender)
             .setContentText(message)
             .setAutoCancel(true)
-            .addExtras(android.os.Bundle().apply { putBoolean("aria_synthetic_test", true) })
+            .addExtras(android.os.Bundle().apply {
+                putBoolean("aria_synthetic_test", true)
+                putBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, isGroup)
+            })
             .addAction(action)
             .build()
         manager.notify(NOTIFICATION_ID, notification)
