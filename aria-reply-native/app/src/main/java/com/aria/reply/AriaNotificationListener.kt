@@ -173,8 +173,8 @@ class AriaNotificationListener : NotificationListenerService() {
 
                     // ── Follow-up tracking ─────────────────────────────────────
                     if (commitment != null) {
-                        store.addFollowUp(conversationKey, commitment)
-                        store.logEvent("Follow-up task created: $commitment", null)
+                        val isNew = store.addFollowUp(conversationKey, commitment)
+                        store.logEvent(if (isNew) "Follow-up task created: $commitment" else "Follow-up task updated (already had one pending for $conversationKey): $commitment", null)
                         FollowUpNotifier.refresh(this@AriaNotificationListener)
                     }
                 } else {

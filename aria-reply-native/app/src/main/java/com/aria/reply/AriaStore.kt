@@ -221,12 +221,31 @@ class AriaStore(context: Context) {
     // ── Follow-up tasks ───────────────────────────────────────────────────────
     data class FollowUpTask(val id: String, val sender: String, val commitment: String, val createdAt: Long, val done: Boolean)
 
-    fun addFollowUp(sender: String, commitment: String) {
+    /**
+     * Adds a follow-up, but never stacks more than one *pending* task per sender —
+     * if that sender already has an open commitment, this just refreshes its text and
+     * timestamp instead of creating a second entry. Returns true if a new task was
+     * created, false if an existing pending one was updated instead.
+     */
+    fun addFollowUp(sender: String, commitment: String): Boolean {
+        val existingSet = prefs.getStringSet("followups", emptySet<String>()).orEmpty()
+        val existingLine = existingSet.firstOrNull { raw ->
+            val p = raw.split('|', limit = 5)
+            p.size >= 5 && p[4] != "true" && unescape(p[2]).equals(sender, ignoreCase = true)
+        }
+        val mutable = existingSet.toMutableSet()
+        if (existingLine != null) {
+            val p = existingLine.split('|', limit = 5)
+            mutable.remove(existingLine)
+            mutable.add("${p[0]}|${System.currentTimeMillis()}|${p[2]}|${escape(commitment)}|false")
+            prefs.edit().putStringSet("followups", mutable).apply()
+            return false
+        }
         val id = UUID.randomUUID().toString()
         val line = "${id}|${System.currentTimeMillis()}|${escape(sender)}|${escape(commitment)}|false"
-        val existing = prefs.getStringSet("followups", emptySet<String>())?.toMutableSet() ?: mutableSetOf()
-        existing.add(line)
-        prefs.edit().putStringSet("followups", existing).apply()
+        mutable.add(line)
+        prefs.edit().putStringSet("followups", mutable).apply()
+        return true
     }
 
     fun followUps(): List<FollowUpTask> =
