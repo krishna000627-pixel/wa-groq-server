@@ -89,6 +89,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         store.contactsPermissionGranted = ContactResolver.hasPermission(this)
+        FollowUpNotifier.refresh(this)
         if (::page.isInitialized) render()
     }
 
@@ -468,7 +469,7 @@ class MainActivity : Activity() {
                     row.addView(tv(task.commitment, 13f, ink), LinearLayout.LayoutParams(0, -2, 1f))
                     addView(row)
                 }
-                c.setOnClickListener { store.markFollowUpDone(task.id); toast("Done ✓"); render() }
+                c.setOnClickListener { store.markFollowUpDone(task.id); FollowUpNotifier.refresh(this); toast("Done ✓"); render() }
                 l.addView(c)
             }
         }
@@ -521,6 +522,9 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, dp(4), 0, dp(4)) }
         }
         l.addView(ctxSwitch)
+        if (!ctxSwitch.isChecked) {
+            l.addView(tv("No real history loaded here, so this always simulates a brand-new conversation — that's why the introduction appears every time. To test the greeting/gap logic for real, open a real chat → \"Use in API Lab\" with Context ON, or use Home → \"Test AI pipeline\".", 11f, muted).apply { setPadding(0, dp(2), 0, dp(4)) })
+        }
 
         // Run button
         val runBtn = LinearLayout(this).apply {
@@ -926,7 +930,7 @@ class MainActivity : Activity() {
                         row.addView(col)
                         addView(row)
                     }
-                    c.setOnClickListener { store.markFollowUpDone(task.id); toast("Done ✓"); render() }
+                    c.setOnClickListener { store.markFollowUpDone(task.id); FollowUpNotifier.refresh(this); toast("Done ✓"); render() }
                     l.addView(c)
                 }
             }
@@ -951,7 +955,7 @@ class MainActivity : Activity() {
 
         l.addView(sec("Actions"))
         l.addView(actionRow("Clear completed", R.drawable.ic_trash, surface2) {
-            store.clearDoneFollowUps(); toast("Cleared"); render()
+            store.clearDoneFollowUps(); FollowUpNotifier.refresh(this); toast("Cleared"); render()
         })
         show(l)
     }
@@ -961,7 +965,7 @@ class MainActivity : Activity() {
     // ══════════════════════════════════════════════════════════════════════════
     private fun systemPage() {
         val l = shell("System")
-        l.addView(infoCard("Version",     "V35 • Back Navigation • Scroll Fix • Contact Picker • Lab Tag Fix • Testable Filters", surfaceTeal, R.drawable.ic_info))
+        l.addView(infoCard("Version",     "V37 • Follow-up notification lifecycle fixed (stays in sync when marked done)", surfaceTeal, R.drawable.ic_info))
         l.addView(infoCard("Security",    "API keys encrypted with Android Keystore AES-256-GCM. Notification text is untrusted input — never executed as instructions.", surface, R.drawable.ic_key))
         l.addView(infoCard("Pipeline",    "WA notification → dedup (key + content) → contact resolve → group/contact filter → burst engine → seen-gate → context window → AI generation → RemoteInput delivery → follow-up tag extraction.", surfaceGreen, R.drawable.ic_bolt))
         l.addView(infoCard("Design",      "Dark cocoa base • sage active states • muted teal secondary • terracotta errors. Claymorphism — rounded rectangular clay surfaces, no white canvas, no bento grid.", surface2, R.drawable.ic_palette))

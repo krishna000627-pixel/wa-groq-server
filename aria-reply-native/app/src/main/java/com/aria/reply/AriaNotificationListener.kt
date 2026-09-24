@@ -175,7 +175,7 @@ class AriaNotificationListener : NotificationListenerService() {
                     if (commitment != null) {
                         store.addFollowUp(conversationKey, commitment)
                         store.logEvent("Follow-up task created: $commitment", null)
-                        postFollowUpNotification(conversationKey, commitment)
+                        FollowUpNotifier.refresh(this@AriaNotificationListener)
                     }
                 } else {
                     store.lastError = "RemoteInput PendingIntent could not be sent"
@@ -220,48 +220,12 @@ class AriaNotificationListener : NotificationListenerService() {
     }
 
     // ── Persistent follow-up notification ─────────────────────────────────────
-    private fun postFollowUpNotification(sender: String, commitment: String) {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java).apply { putExtra("openScreen", 7) },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val n = Notification.Builder(this, CHANNEL_FOLLOWUP)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("Aria Follow-up — $sender")
-            .setContentText(commitment)
-            .setOngoing(true)
-            .setContentIntent(pendingIntent)
-            .build()
-        nm.notify(NOTIF_ID_FOLLOWUP, n)
-    }
-
-    fun updateFollowUpNotification() {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val pending = store.pendingFollowUps()
-        if (pending.isEmpty()) { nm.cancel(NOTIF_ID_FOLLOWUP); return }
-        val summary = pending.joinToString("; ") { it.commitment }.take(200)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java).apply { putExtra("openScreen", 7) },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val n = Notification.Builder(this, CHANNEL_FOLLOWUP)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("${pending.size} Aria follow-up${if (pending.size > 1) "s" else ""} pending")
-            .setContentText(summary)
-            .setOngoing(true)
-            .setContentIntent(pendingIntent)
-            .build()
-        nm.notify(NOTIF_ID_FOLLOWUP, n)
-    }
+    // Posting/refreshing now lives in FollowUpNotifier so both this service and the
+    // Follow-ups screen (MainActivity) can keep the same notification in sync.
 
     private fun ensureFollowUpChannel() {
+        FollowUpNotifier.ensureChannel(this)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_FOLLOWUP) == null) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL_FOLLOWUP, "Aria Follow-ups", NotificationManager.IMPORTANCE_LOW))
-        }
         ensureSummaryChannel(nm)
     }
 
@@ -272,9 +236,7 @@ class AriaNotificationListener : NotificationListenerService() {
     }
 
     companion object {
-        private const val CHANNEL_FOLLOWUP = "aria_followup"
         private const val CHANNEL_SUMMARY  = "aria_summary"
-        const val NOTIF_ID_FOLLOWUP = 9001
 
         @Volatile private var lastReplyAction: Notification.Action? = null
         @Volatile private var lastRemoteInput: RemoteInput? = null

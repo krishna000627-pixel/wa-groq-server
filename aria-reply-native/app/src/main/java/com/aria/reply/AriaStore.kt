@@ -332,12 +332,11 @@ Return only the reply text (with the optional follow-up line at the very end, on
         // Commitment patterns for follow-up detection (EN + HI) — fallback for prompts
         // that don't use the [[FOLLOWUP: ...]] tag (e.g. a custom system prompt).
         val COMMITMENT_PATTERNS = listOf(
-            Regex("i'?ll (?:tell|inform|let|notify|send|message|remind|update|check|ask|do|handle|take care)", RegexOption.IGNORE_CASE),
-            Regex("i will (?:tell|inform|let|notify|send|message|remind|update|check|ask|do|handle)", RegexOption.IGNORE_CASE),
-            Regex("(?:bata|inform kar|bhej|remind kar|de deta|de dunga|bolunga|kahunga|poochunga|dekhunga) (?:dunga|dunga|deta|hoon)", RegexOption.IGNORE_CASE),
-            Regex("(?:bata dunga|inform kar dunga|bhej dunga|remind kar dunga|pooch ke bata)", RegexOption.IGNORE_CASE),
-            Regex("i'?ll (?:get back|follow up|circle back)", RegexOption.IGNORE_CASE),
-            Regex("will do", RegexOption.IGNORE_CASE)
+            Regex("""\bi'?ll (?:tell|inform|let|notify|send|message|remind|update|check|ask|do|handle|take care)\b""", RegexOption.IGNORE_CASE),
+            Regex("""\bi will (?:tell|inform|let|notify|send|message|remind|update|check|ask|do|handle)\b""", RegexOption.IGNORE_CASE),
+            Regex("""\b(?:bata|inform kar|bhej|remind kar|de deta|de dunga|bolunga|kahunga|poochunga|dekhunga) (?:dunga|deta|hoon)\b""", RegexOption.IGNORE_CASE),
+            Regex("""\b(?:bata dunga|inform kar dunga|bhej dunga|remind kar dunga|pooch ke bata)\b""", RegexOption.IGNORE_CASE),
+            Regex("""\bi'?ll (?:get back|follow up|circle back)\b""", RegexOption.IGNORE_CASE)
         )
     }
 }

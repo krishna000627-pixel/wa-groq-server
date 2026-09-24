@@ -18,6 +18,7 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED -> {
                 if (store.pendingFollowUps().isNotEmpty()) {
                     store.logEvent("Boot: restoring follow-up notification", null)
+                    FollowUpNotifier.refresh(context)
                 }
                 AriaNotificationListener.rebind(context)
             }
